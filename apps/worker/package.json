@@ -1,0 +1,39 @@
+{
+  "name": "@quorum/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b tsconfig.build.json",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "lint": "eslint src",
+    "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@quorum/ai": "workspace:*",
+    "@quorum/browser": "workspace:*",
+    "@quorum/core": "workspace:*",
+    "@quorum/db": "workspace:*",
+    "@quorum/events": "workspace:*",
+    "@quorum/export": "workspace:*",
+    "@quorum/storage": "workspace:*",
+    "bullmq": "^5.34.6",
+    "ioredis": "^5.4.2",
+    "pino": "^9.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@quorum/config": "workspace:*",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.18.0",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

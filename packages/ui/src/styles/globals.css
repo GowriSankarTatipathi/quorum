@@ -1,0 +1,132 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * QUORUM design tokens — design document §3.0.
+ *
+ * Three surface levels only; more levels read as mud. Separation is done with 1px
+ * hairlines rather than nested cards. Colour is semantic, never decorative: every
+ * accent means a specific state, and every state also carries a non-colour
+ * affordance (icon + label) so the UI is not colour-dependent.
+ */
+:root {
+  /* Light mode ships because accountants live in spreadsheets, but dark is default. */
+  --surface-base: #ffffff;
+  --surface-raised: #f7f7f8;
+  --surface-overlay: #ffffff;
+  --border-hairline: rgba(0, 0, 0, 0.1);
+  --text-primary: #0a0a0b;
+  --text-secondary: #52525b;
+  --text-tertiary: #8b8b94;
+
+  --accent-action: #3b6fd4;
+  --accent-verified: #16a34a;
+  --accent-review: #ca8a04;
+  --accent-failed: #dc2626;
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  --duration-control: 150ms;
+  --duration-panel: 240ms;
+  --ease-quorum: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.dark {
+  --surface-base: #0a0a0b;
+  --surface-raised: #131315;
+  --surface-overlay: #1c1c20;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #6b6b75;
+
+  --accent-action: #5b8def;
+  --accent-verified: #4ade80;
+  --accent-review: #fbbf24;
+  --accent-failed: #f87171;
+}
+
+@theme inline {
+  --color-base: var(--surface-base);
+  --color-raised: var(--surface-raised);
+  --color-overlay: var(--surface-overlay);
+  --color-hairline: var(--border-hairline);
+
+  --color-fg: var(--text-primary);
+  --color-fg-muted: var(--text-secondary);
+  --color-fg-subtle: var(--text-tertiary);
+
+  --color-action: var(--accent-action);
+  --color-verified: var(--accent-verified);
+  --color-review: var(--accent-review);
+  --color-failed: var(--accent-failed);
+
+  --radius-control: var(--radius-control);
+  --radius-panel: var(--radius-panel);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Monospace for anything machine-generated — selectors, URLs, event lines, DOM.
+     A pre-attentive signal that a string is literal and unedited. */
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, 'SF Mono', monospace;
+
+  --animate-stream-in: stream-in var(--duration-control) var(--ease-quorum);
+  --animate-pulse-live: pulse-live 2s var(--ease-quorum) infinite;
+
+  @keyframes stream-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-live {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-hairline);
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Focus rings on every interactive element. Non-negotiable from commit 1. */
+  :focus-visible {
+    outline: 2px solid var(--color-action);
+    outline-offset: 2px;
+  }
+
+  /*
+   * Motion exists only to answer "where did that come from?". When the user has asked
+   * for less of it, we collapse every transition rather than merely shortening it.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

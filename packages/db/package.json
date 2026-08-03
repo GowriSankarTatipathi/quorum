@@ -1,0 +1,45 @@
+{
+  "name": "@quorum/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "prisma generate && tsc -b tsconfig.build.json",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
+    "lint": "eslint src",
+    "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "deploy": "prisma migrate deploy",
+    "studio": "prisma studio",
+    "validate": "prisma validate",
+    "format": "prisma format",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.1",
+    "@quorum/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@quorum/config": "workspace:*",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.18.0",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

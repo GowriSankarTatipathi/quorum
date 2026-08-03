@@ -1,0 +1,84 @@
+# Local development dependencies. The application itself runs on the host via
+# `pnpm dev` so that hot reload and a headed Chromium both work; only the stateful
+# services live in containers.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: quorum-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quorum
+      POSTGRES_PASSWORD: quorum
+      POSTGRES_DB: quorum
+    ports:
+      - '5433:5432'
+    volumes:
+      - quorum-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U quorum -d quorum']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: quorum-redis
+    restart: unless-stopped
+    # appendonly keeps approval barriers and queue state across a container restart,
+    # so a `docker compose restart` does not silently drop a run waiting on a human.
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - quorum-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    # S3-compatible local stand-in for Cloudflare R2, so artifact storage code paths
+    # are exercised in development rather than mocked.
+    image: minio/minio:latest
+    container_name: quorum-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: quorum
+      MINIO_ROOT_PASSWORD: quorumquorum
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - quorum-minio:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    # Magic-link delivery in development. A real SMTP server with a web inbox, so the
+    # sign-in flow is exercised end to end locally instead of logging a link to stdout
+    # and leaving the actual email path untested until staging.
+    image: axllent/mailpit:latest
+    container_name: quorum-mailpit
+    restart: unless-stopped
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://localhost:8025/readyz']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  quorum-postgres:
+  quorum-redis:
+  quorum-minio:

@@ -1,0 +1,21 @@
+{
+  "name": "@quorum/config",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "tsconfig",
+    "eslint"
+  ],
+  "exports": {
+    "./tsconfig/*": "./tsconfig/*",
+    "./eslint/*": "./eslint/*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@next/eslint-plugin-next": "^15.1.4",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "typescript-eslint": "^8.19.1"
+  }
+}

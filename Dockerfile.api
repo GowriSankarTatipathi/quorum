@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+# Multi-stage build. The final image contains production dependencies and compiled
+# output only — no source, no toolchain, no pnpm store.
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
+COPY packages/config/package.json  packages/config/
+COPY packages/core/package.json    packages/core/
+COPY packages/events/package.json  packages/events/
+COPY packages/ai/package.json      packages/ai/
+COPY packages/browser/package.json packages/browser/
+COPY packages/db/package.json      packages/db/
+COPY apps/api/package.json         apps/api/
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @quorum/api...
+
+FROM deps AS build
+COPY . .
+RUN pnpm --filter @quorum/db exec prisma generate \
+ && pnpm --filter @quorum/api... build \
+ && pnpm deploy --filter @quorum/api --prod /app/out
+
+FROM base AS runtime
+ENV NODE_ENV=production
+RUN addgroup -S quorum && adduser -S quorum -G quorum
+COPY --from=build --chown=quorum:quorum /app/out /app
+USER quorum
+EXPOSE 3001
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "dist/server.js"]

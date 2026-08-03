@@ -1,0 +1,125 @@
+'use client';
+
+import { cn } from '@quorum/ui';
+import { AlertTriangle, ExternalLink, Table2 } from 'lucide-react';
+import { useRunStore } from '@/stores/run-store';
+import { ConfidencePips } from './confidence-pips';
+import { EmptyState } from './empty-state';
+
+const STATUS_STYLE: Record<string, string> = {
+  VERIFIED: 'text-verified',
+  UNVERIFIED: 'text-fg-subtle',
+  CONTRADICTED: 'text-failed',
+  SUPERSEDED: 'text-fg-subtle line-through',
+};
+
+/**
+ * Results fill in live.
+ *
+ * Value accrues continuously rather than at the end: stop the run at 60% and you keep 60%
+ * of the value. It also removes the "did it freeze?" anxiety that kills long-running agent
+ * interfaces — something visible is always arriving.
+ */
+export function ClaimsTable() {
+  const claims = useRunStore((state) => state.claims);
+  const critiques = useRunStore((state) => state.critiques);
+  const rows = [...claims.values()];
+
+  const flaggedIds = new Set(critiques.flatMap((critique) => critique.claimIds));
+
+  return (
+    <section aria-label="Results" className="flex min-h-0 flex-col">
+      <header className="flex items-center gap-2 border-b border-hairline px-3 py-2">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-fg-muted">Results</h2>
+        <span className="ml-auto font-mono text-[11px] text-fg-subtle">
+          {rows.length} {rows.length === 1 ? 'claim' : 'claims'}
+        </span>
+      </header>
+
+      {rows.length === 0 ? (
+        <EmptyState
+          icon={<Table2 className="size-4" aria-hidden />}
+          title="No values extracted yet"
+          detail="Each value appears the moment it is read, with the page it came from. Stopping early keeps everything found so far."
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-base">
+              <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wide text-fg-subtle">
+                <th scope="col" className="px-3 py-1.5 font-normal">
+                  Entity
+                </th>
+                <th scope="col" className="px-3 py-1.5 font-normal">
+                  Field
+                </th>
+                <th scope="col" className="px-3 py-1.5 font-normal">
+                  Value
+                </th>
+                <th scope="col" className="px-3 py-1.5 font-normal">
+                  Confidence
+                </th>
+                <th scope="col" className="px-3 py-1.5 font-normal">
+                  Source
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-hairline)]">
+              {rows.map((claim) => (
+                <tr key={claim.id} className="animate-[stream-in_150ms_cubic-bezier(0.2,0,0,1)]">
+                  <td className="px-3 py-1.5">{claim.entity}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11px] text-fg-muted">{claim.field}</td>
+                  <td
+                    className={cn('px-3 py-1.5 font-mono tabular-nums', STATUS_STYLE[claim.status])}
+                  >
+                    {claim.value === null ? (
+                      <span className="italic text-fg-subtle">null</span>
+                    ) : (
+                      renderValue(claim.value)
+                    )}
+                    {claim.unit && (
+                      <span className="ml-1 text-[10px] text-fg-subtle">{claim.unit}</span>
+                    )}
+                    {flaggedIds.has(claim.id) && (
+                      <AlertTriangle
+                        className="ml-1.5 inline size-3 text-review"
+                        aria-label="Flagged by the Critic"
+                      />
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <ConfidencePips confidence={claim.confidence} />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {/* Provenance is one click away from every value, always. */}
+                    <a
+                      href={claim.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1 font-mono text-[11px] text-fg-subtle hover:text-[var(--color-action)]"
+                    >
+                      {new URL(claim.sourceUrl).hostname.replace(/^www\./, '')}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Claim values are primitives or string arrays. Anything else would stringify to
+ * "[object Object]" — a cell that looks like data and is not, which is precisely the kind
+ * of quiet wrongness this product exists to avoid.
+ */
+function renderValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(renderValue).join(', ');
+  return JSON.stringify(value) ?? '—';
+}

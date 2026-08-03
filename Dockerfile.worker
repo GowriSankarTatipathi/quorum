@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+# The worker image carries Chromium, so it starts from the Playwright base image
+# rather than alpine: browser dependencies are notoriously hard to assemble by hand
+# and the pinned base guarantees the browser matches the driver version.
+FROM mcr.microsoft.com/playwright:v1.49.1-noble AS base
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
+COPY packages/config/package.json  packages/config/
+COPY packages/core/package.json    packages/core/
+COPY packages/events/package.json  packages/events/
+COPY packages/ai/package.json      packages/ai/
+COPY packages/browser/package.json packages/browser/
+COPY packages/db/package.json      packages/db/
+COPY apps/worker/package.json      apps/worker/
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @quorum/worker...
+
+FROM deps AS build
+COPY . .
+RUN pnpm --filter @quorum/db exec prisma generate \
+ && pnpm --filter @quorum/worker... build \
+ && pnpm deploy --filter @quorum/worker --prod /app/out
+
+FROM base AS runtime
+ENV NODE_ENV=production
+COPY --from=build --chown=pwuser:pwuser /app/out /app
+USER pwuser
+CMD ["node", "dist/index.js"]

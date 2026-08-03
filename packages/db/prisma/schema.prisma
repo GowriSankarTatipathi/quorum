@@ -1,0 +1,701 @@
+// QUORUM database schema.
+//
+// Phase 2 introduces the workspace, identity and session models. The run-time domain
+// (Run, Step, Claim, Verdict, Critique, Approval, Event, LlmCall, ...) lands in
+// Phase 3 exactly as specified in the design document, §10.2.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (PgBouncer / Neon pooler) used by the running services.
+  url       = env("DATABASE_URL")
+  // Direct connection required by `prisma migrate`, which cannot run through a pooler.
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workspace
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A customer workspace. Trust Ladder configuration lives here rather than in code so
+/// a firm handling regulated filings can tighten gating without a deploy.
+model Org {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  /// Hosts a run may navigate to. Empty means "any public https".
+  allowedDomains  String[] @default([])
+  maxRunBudgetUsd Decimal  @default(2.00) @db.Decimal(10, 4)
+
+  /// Actions at or above this Trust Ladder level require a human signature.
+  requireApprovalAbove Int @default(3)
+
+  /// Org-wide ceiling on approval authority. Clamps every member; never raises one.
+  maxApprovalTrustLevel Int @default(4)
+
+  users      User[]
+  authEvents AuthEvent[]
+  runs       Run[]
+  recipes    Recipe[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+/// Per-user override of the approval authority implied by a role. Modelled separately
+/// from `role` because "this contractor may run and read everything but must never
+/// sign anything" is a real request, and demoting them to VIEWER answers it wrongly.
+enum ApprovalAuthority {
+  INHERIT
+  GRANTED
+  REVOKED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  orgId         String
+  org           Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+
+  role              Role              @default(MEMBER)
+  approvalAuthority ApprovalAuthority @default(INHERIT)
+
+  /// Explicit approval ceiling. Only consulted when approvalAuthority is GRANTED.
+  maxApprovalTrustLevel Int?
+
+  /// Incremented by "sign out everywhere" and by any change to role or approval
+  /// authority. Access tokens carry the value they were minted with, so a privilege
+  /// change invalidates outstanding tokens instead of waiting out their TTL.
+  tokenVersion Int @default(0)
+
+  disabledAt  DateTime?
+  lastLoginAt DateTime?
+
+  accounts      Account[]
+  sessions      Session[]
+  refreshTokens RefreshToken[]
+  authEvents    AuthEvent[]
+  runs          Run[]
+  approvals     Approval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([email])
+}
+
+/// NextAuth OAuth account linkage (Google).
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// Required by the NextAuth Prisma adapter. Unused under the JWT session strategy, but
+/// present so switching strategies is a config change rather than a migration.
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+
+  @@index([userId])
+}
+
+/// Magic-link tokens. NextAuth stores a hash here and deletes the row on redemption,
+/// which is what makes a link single-use.
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sessions and refresh-token rotation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One row per issued refresh token.
+///
+/// Tokens form a *family*: every rotation writes a new row carrying the same
+/// `familyId` and marks its predecessor rotated. Presenting an already-rotated token
+/// means the token was captured and replayed, so the whole family is revoked at once.
+/// Rows are retained after rotation because the detection depends on remembering them.
+model RefreshToken {
+  id       String @id @default(cuid())
+  familyId String
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the token. The plaintext exists only in the client's session cookie,
+  /// so a database disclosure does not yield usable credentials.
+  tokenHash String @unique
+
+  expiresAt DateTime
+  rotatedAt DateTime?
+  revokedAt DateTime?
+
+  /// Set when this token was rotated, so a replay can be traced to its successor.
+  replacedById String? @unique
+
+  /// Captured for the session-management UI, not for fingerprinting.
+  userAgent String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+enum AuthEventType {
+  SIGN_IN
+  SIGN_OUT
+  SIGN_OUT_ALL
+  TOKEN_REFRESHED
+  TOKEN_REUSE_DETECTED
+  SESSION_REVOKED
+  ROLE_CHANGED
+  APPROVAL_AUTHORITY_CHANGED
+  ACCESS_DENIED
+  ACCOUNT_DISABLED
+}
+
+/// Append-only authentication audit trail. "Who authorised this" is the first question
+/// asked after anything goes wrong in a regulated profession, and an audit trail that
+/// can be retrofitted is one that was never captured.
+model AuthEvent {
+  id     String        @id @default(cuid())
+  type   AuthEventType
+  userId String?
+  user   User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orgId  String?
+  org    Org?          @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  /// Set when an administrator acted on another user's behalf.
+  actorUserId String?
+  provider    String?
+  ipAddress   String?
+  userAgent   String?
+  detail      Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([type])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Runs
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum RunStatus {
+  CREATED
+  PLANNING
+  AWAITING_APPROVAL
+  EXECUTING
+  VERIFYING
+  CRITIQUE
+  RECOVERING
+  PAUSED
+  TAKEOVER
+  FORMATTING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AutonomyMode {
+  CAREFUL
+  BALANCED
+  AUTONOMOUS
+}
+
+model Run {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgId    String
+  org      Org     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  recipeId String?
+  recipe   Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  goal   String       @db.Text
+  mode   AutonomyMode @default(BALANCED)
+  status RunStatus    @default(CREATED)
+
+  /// Serialised XState snapshot and blackboard. Persisted together on every transition
+  /// because crash-resume needs the whole context atomically; normalising them would
+  /// mean a twelve-table write on each step of a state machine that transitions often.
+  machineState Json?
+  blackboard   Json?
+
+  /// Guards approve-what-you-saw: a plan regenerated between render and click no longer
+  /// matches, so the approval is rejected rather than silently applied to a new plan.
+  planHash String?
+
+  budgetUsd    Decimal @default(0.50) @db.Decimal(10, 4)
+  spentUsd     Decimal @default(0) @db.Decimal(10, 4)
+  inputTokens  Int     @default(0)
+  outputTokens Int     @default(0)
+
+  browserSessionId String?
+  liveViewUrl      String?
+
+  errorCode   String?
+  errorDetail Json?
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  steps      Step[]
+  events     Event[]
+  llmCalls   LlmCall[]
+  artifacts  Artifact[]
+  critiques  Critique[]
+  shareLinks ShareLink[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  BLOCKED
+  DONE
+  FAILED
+  SKIPPED
+}
+
+model Step {
+  id    String @id @default(cuid())
+  runId String
+  run   Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  index Int
+
+  objective String  @db.Text
+  targetUrl String?
+
+  /// Which agents this step routes through, e.g. ["browser", "reasoning"].
+  agentPath String[] @default([])
+
+  /// The output contract the Planner declared. Rendered in the plan as `Expects:`, used
+  /// to validate the Reasoning agent, and used by Verification to know what to check.
+  outputSchema Json?
+
+  riskLevel RiskLevel  @default(LOW)
+  /// Difficulties the Planner predicted before the run started.
+  notes     String?    @db.Text
+  status    StepStatus @default(PENDING)
+
+  estimatedMs  Int?
+  actualMs     Int?
+  estimatedUsd Decimal? @db.Decimal(10, 4)
+
+  attempt Int @default(0)
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+
+  claims     Claim[]
+  approvals  Approval[]
+  recoveries RecoveryAttempt[]
+  undoFrames UndoFrame[]
+
+  @@unique([runId, index])
+  @@index([runId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Claims — the heart of the product
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ClaimStatus {
+  UNVERIFIED
+  VERIFIED
+  CONTRADICTED
+  UNSUPPORTED
+  AMBIGUOUS
+  SUPERSEDED
+  HUMAN_CORRECTED
+}
+
+/// A fact WITH provenance.
+///
+/// Append-only: a correction inserts a new row and points `supersedesId` at the old one,
+/// which is retained. An audit trail that can be silently mutated is not an audit trail,
+/// and keeping history makes time-travel a filter rather than a feature.
+model Claim {
+  id     String @id @default(cuid())
+  stepId String
+  step   Step   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  entity String
+  field  String
+  value  Json
+  unit   String?
+
+  // --- provenance: every column here answers "where did this come from?"
+  sourceUrl      String
+  sourceSelector String?
+  /// The verbatim text the value was read from. Asserting that this substring actually
+  /// appears in the captured DOM is the strongest hallucination check we have, and it
+  /// costs zero tokens.
+  sourceText     String?  @db.Text
+  screenshotKey  String?
+  domSnapshotKey String?
+  extractedAt    DateTime @default(now())
+  extractedBy    String
+  /// Turns "verified extraction rate dropped after Tuesday's deploy" into one GROUP BY.
+  promptVersion  String
+
+  confidence Decimal     @db.Decimal(4, 3)
+  status     ClaimStatus @default(UNVERIFIED)
+  ambiguity  String?     @db.Text
+  /// Why a null is a null: "not_present" | "ambiguous" | "requires_human".
+  nullReason String?
+
+  supersedesId String? @unique
+  supersedes   Claim?  @relation("Supersede", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy Claim?  @relation("Supersede")
+  /// Set when a human, rather than an agent, produced the correction.
+  correctedBy  String?
+
+  verdicts Verdict[]
+
+  @@index([stepId])
+  @@index([entity, field])
+  @@index([status])
+}
+
+model Verdict {
+  id      String @id @default(cuid())
+  claimId String
+  claim   Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  verdict            ClaimStatus
+  /// What the verifier read BEFORE being shown the claim. Recorded because the ordering
+  /// is the anchoring-bias mitigation: without it, verifiers confirm ~95% of claims
+  /// regardless of correctness, which manufactures false confidence.
+  independentReading Json?
+  rationale          String?     @db.Text
+  confidence         Decimal     @db.Decimal(4, 3)
+  model              String
+  createdAt          DateTime    @default(now())
+
+  @@index([claimId])
+}
+
+enum CritiqueKind {
+  UNIT_MISMATCH
+  OUTLIER
+  DUPLICATE
+  COVERAGE_GAP
+  STALENESS
+  CONTRADICTION
+  SUSPICIOUS_UNIFORMITY
+}
+
+enum Severity {
+  BLOCKING
+  WARNING
+  NOTE
+}
+
+enum CritiqueResolution {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  REMEDIED
+}
+
+/// Cross-claim findings. Catches what per-claim verification structurally cannot: five
+/// individually-correct prices where one was read on a different billing basis.
+model Critique {
+  id    String @id @default(cuid())
+  runId String
+  run   Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  kind     CritiqueKind
+  severity Severity
+  message  String       @db.Text
+  claimIds String[]     @default([])
+  /// A concrete remedy, e.g. { action: 're_extract', params: { period: 'monthly' } }.
+  remedy   Json
+
+  resolution CritiqueResolution @default(OPEN)
+  resolvedBy String?
+  resolvedAt DateTime?
+  createdAt  DateTime           @default(now())
+
+  @@index([runId, severity])
+  @@index([runId, resolution])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Human control
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  TIMEOUT
+}
+
+enum ApprovalScope {
+  SINGLE
+  SIMILAR_IN_RUN
+}
+
+model Approval {
+  id     String  @id @default(cuid())
+  stepId String
+  step   Step    @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  trustLevel    Int
+  /// The exact proposed action and payload. Approving a *described* action is theatre;
+  /// approving a *shown* one is control.
+  action        Json
+  payload       Json?
+  editedPayload Json?
+  screenshotKey String?
+  /// Human-readable "why this is gated", surfaced verbatim in the modal.
+  reason        String  @db.Text
+
+  status ApprovalStatus @default(PENDING)
+  /// Blanket permissions are how approval systems die, so consent is run-scoped.
+  scope  ApprovalScope  @default(SINGLE)
+
+  requestedAt DateTime  @default(now())
+  decidedAt   DateTime?
+
+  @@index([stepId, status])
+  @@index([userId])
+}
+
+model RecoveryAttempt {
+  id     String @id @default(cuid())
+  stepId String
+  step   Step   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  attempt         Int
+  errorCode       String
+  errorClass      String
+  strategy        String
+  rationale       String? @db.Text
+  /// Recorded so the system can tell whether the recovery actually worked.
+  expectedOutcome String? @db.Text
+
+  succeeded Boolean?
+  costUsd   Decimal  @default(0) @db.Decimal(10, 6)
+  createdAt DateTime @default(now())
+
+  @@index([stepId])
+  @@index([errorClass])
+}
+
+/// Enough page state to reverse the last action.
+model UndoFrame {
+  id     String @id @default(cuid())
+  stepId String
+  step   Step   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  seq            Int
+  url            String
+  scrollY        Int     @default(0)
+  domSnapshotKey String
+  screenshotKey  String
+  cookiesKey     String?
+  /// False once a step has committed something we cannot take back. Undo is honestly
+  /// refused rather than pretending, and the Trust Ladder guarantees such a step was
+  /// explicitly approved by a human in the first place.
+  reversible     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([stepId, seq])
+  @@index([stepId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit trail, cost and artifacts
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Append-only. The replay source of truth: the client's view is a pure projection of
+/// this log, so live streaming and replay run through identical code.
+model Event {
+  id    String @id
+  runId String
+  run   Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  /// Monotonic per run. The compact cursor a reconnecting WebSocket resumes from.
+  seq     BigInt
+  type    String
+  agent   String?
+  stepId  String?
+  payload Json
+
+  causationId   String?
+  correlationId String?
+  ts            DateTime @default(now())
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
+  @@index([runId, type])
+}
+
+model LlmCall {
+  id     String  @id @default(cuid())
+  runId  String
+  run    Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepId String?
+
+  agent         String
+  model         String
+  promptVersion String
+
+  inputTokens  Int
+  outputTokens Int
+  cachedTokens Int @default(0)
+
+  /// Six decimal places because a single Haiku call costs fractions of a cent, and a
+  /// total that disagrees with the sum of its line items is disqualifying here.
+  costUsd   Decimal @db.Decimal(10, 6)
+  latencyMs Int
+
+  cached          Boolean @default(false)
+  fallbackUsed    Boolean @default(false)
+  schemaViolation Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([runId])
+  @@index([agent, model, promptVersion])
+  @@index([createdAt])
+}
+
+enum ArtifactKind {
+  SCREENSHOT
+  DOM_SNAPSHOT
+  EXPORT_XLSX
+  EXPORT_CSV
+  EXPORT_JSON
+  EXPORT_PDF
+  RECORDING
+}
+
+model Artifact {
+  id    String @id @default(cuid())
+  runId String
+  run   Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  kind  ArtifactKind
+  /// Object key in R2. Bytes never live in Postgres: a three-minute run produces ~360
+  /// screenshots, which would bloat backups and slow every query that touches the table.
+  r2Key String
+  mime  String
+  bytes Int
+
+  createdAt DateTime @default(now())
+
+  @@index([runId, kind])
+}
+
+/// A saved run. Human corrections are folded back in as planner hints, which is how the
+/// product compounds with use rather than starting from zero every quarter.
+model Recipe {
+  id    String @id @default(cuid())
+  orgId String
+  org   Org    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name         String
+  goalTemplate String @db.Text
+  planTemplate Json
+  corrections  Json?
+
+  runCount    Int      @default(0)
+  successRate Decimal? @db.Decimal(4, 3)
+
+  runs Run[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+/// A capability token: scoped to one run, read-only, expiring, revocable.
+model ShareLink {
+  id    String @id @default(cuid())
+  runId String
+  run   Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the token. The plaintext exists only in the URL handed to the recipient.
+  tokenHash String    @unique
+  createdBy String
+  expiresAt DateTime
+  revokedAt DateTime?
+  viewCount Int       @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([runId])
+  @@index([expiresAt])
+}

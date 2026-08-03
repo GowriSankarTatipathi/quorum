@@ -1,0 +1,26 @@
+{
+  "extends": "@quorum/config/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../../packages/core/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/events/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/db/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/auth/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/storage/tsconfig.build.json"
+    }
+  ]
+}

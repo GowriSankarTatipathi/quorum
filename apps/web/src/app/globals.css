@@ -1,0 +1,23 @@
+/*
+ * Fonts are self-hosted rather than fetched from Google Fonts.
+ *
+ * `next/font/google` downloads at build time and rewrites requests to our own origin,
+ * but it still requires build-time network access to Google and pins us to their
+ * availability. Self-hosting via Fontsource removes that dependency entirely, makes
+ * offline and air-gapped builds work, and — the deciding reason for this product —
+ * removes a third-party font request from a tool sold to European accounting firms,
+ * where Google Fonts has been the subject of GDPR rulings.
+ */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+@import '@quorum/ui/styles.css';
+
+/* Bind the self-hosted families to the design-system variables consumed by @theme. */
+:root {
+  --font-inter: 'Inter Variable';
+  --font-jetbrains-mono: 'JetBrains Mono Variable';
+}
+
+@source "../../../../packages/ui/src";
+@source "../";

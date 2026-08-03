@@ -1,0 +1,24 @@
+app = "quorum-worker"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.worker"
+
+[env]
+  NODE_ENV = "production"
+  BROWSER_DRIVER = "browserbase"
+  MAX_CONCURRENT_SESSIONS = "4"
+
+# Workers scale to zero. Browser work is the expensive component and demand is
+# bursty and business-hours shaped, so this turns the dominant cost line from
+# always-on into per-run. A ~2s cold start is imperceptible against a 3-minute task.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2048mb"
+
+[processes]
+  worker = "node dist/index.js"
+
+[metrics]
+  port = 9091
+  path = "/metrics"

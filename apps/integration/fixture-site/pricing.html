@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Brex Pricing</title></head>
+  <body>
+    <nav><a href="/pricing.html">Pricing</a></nav>
+    <h1>Pricing</h1>
+    <div role="radiogroup" aria-label="Billing period">
+      <button id="monthly" role="radio" aria-checked="false" aria-pressed="false">Monthly</button>
+      <button id="annual"  role="radio" aria-checked="true"  aria-pressed="true">Annual −20%</button>
+    </div>
+    <section aria-label="Pricing tiers" data-testid="pricing-grid">
+      <article><h2>Essentials</h2><p id="p1">$0</p><p>per user / month</p></article>
+      <article><h2>Premium</h2><p id="p2">$12 /user/month</p></article>
+      <article><h2>Enterprise</h2><p id="p3">Custom</p></article>
+    </section>
+    <form><input type="email" name="email" placeholder="Work email" /><button type="submit">Request a demo</button></form>
+    <script>
+      const prices = { annual: ['$0', '$12 /user/month', 'Custom'], monthly: ['$0', '$15 /user/month', 'Custom'] };
+      function set(period) {
+        document.getElementById('monthly').setAttribute('aria-pressed', String(period === 'monthly'));
+        document.getElementById('monthly').setAttribute('aria-checked', String(period === 'monthly'));
+        document.getElementById('annual').setAttribute('aria-pressed', String(period === 'annual'));
+        document.getElementById('annual').setAttribute('aria-checked', String(period === 'annual'));
+        prices[period].forEach((v, i) => { document.getElementById('p' + (i + 1)).textContent = v; });
+      }
+      document.getElementById('monthly').onclick = () => { set('monthly'); };
+      document.getElementById('annual').onclick = () => { set('annual'); };
+    </script>
+  </body>
+</html>
