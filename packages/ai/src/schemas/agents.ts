@@ -38,7 +38,7 @@ export const BrowserActionOutputSchema = z.object({
     z.object({ type: z.literal('extract_ready'), note: z.string().max(500).nullable().default(null) }),
     z.object({ type: z.literal('give_up'), reason: z.string().min(3).max(500) }),
   ]),
-  confidence: z.number().min(0).max(1).nullable().transform((v) => v ?? 0),
+  confidence: z.number().min(0).max(1).nullable(),
   /** Set when page content tried to issue instructions of its own. */
   injectionDetected: z.boolean().default(false),
   injectionExcerpt: z.string().max(200).nullable().default(null),
@@ -58,7 +58,7 @@ export const ExtractedClaimSchema = z.object({
    * claim without it cannot be traced back to a pixel.
    */
   sourceText: z.string().max(1_000).nullable(),
-  confidence: z.number().min(0).max(1).nullable().transform((v) => v ?? 0),
+  confidence: z.number().min(0).max(1).nullable(),
   ambiguity: z.string().max(500).nullable(),
   /** Why a null is null: "not_present" | "ambiguous" | "requires_human". */
   nullReason: z.enum(['not_present', 'ambiguous', 'requires_human']).nullable(),
@@ -103,13 +103,13 @@ export type ReasoningOutput = z.infer<typeof ReasoningOutputSchema>;
  * `independentReading` is declared first in the schema deliberately: models emit JSON in
  * field order, so requiring it before `verdict` forces a reading to exist before a
  * judgement does. Without it, verifiers confirm ~95% of claims regardless of correctness,
- * which is worse than no verification because it manufactures false confidence.
+ * which is worse than no verification because it manufactures false certainty.
  */
 export const VerdictOutputSchema = z.object({
-  independentReading: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  independentReading: z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())]),
   verdict: z.enum(['CONFIRMED', 'CONTRADICTED', 'UNSUPPORTED', 'AMBIGUOUS']),
   rationale: z.string().min(1).max(1_000),
-  confidence: z.number().min(0).max(1).nullable().transform((v) => v ?? 0),
+  confidence: z.number().min(0).max(1).nullable(),
 });
 
 export type VerdictOutput = z.infer<typeof VerdictOutputSchema>;
@@ -129,11 +129,11 @@ export const CritiqueOutputSchema = z.object({
         ]),
         severity: z.enum(['BLOCKING', 'WARNING', 'NOTE']),
         message: z.string().min(10).max(1_000),
-        /** Every critique must cite the claims it is about. */
-        claimIds: z.array(z.string()).min(1).max(50),
+        /** Every critique must cite the claims it is about. May be empty for COVERAGE_GAP. */
+        claimIds: z.array(z.string()).max(50),
         remedy: z.object({
           action: z.enum(['re_extract', 'drop', 'merge', 'ask_human', 'accept']),
-          params: z.record(z.string(), z.string()).nullable(),
+          params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())])).nullable(),
         }),
       }),
     )

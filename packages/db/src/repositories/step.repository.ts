@@ -1,4 +1,5 @@
 import type { StepStatus } from '@quorum/core';
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import { microUsdToDecimalString } from '../money.js';
 import type { CreateStepInput, StepRecord } from '../types.js';
@@ -16,7 +17,7 @@ export const stepRepository = {
             objective: step.objective,
             targetUrl: step.targetUrl ?? null,
             agentPath: step.agentPath ?? [],
-            outputSchema: step.outputSchema ?? undefined,
+            outputSchema: (step.outputSchema ?? undefined) as Prisma.InputJsonValue | undefined, // Prisma requires InputJsonValue for json fields
             riskLevel: step.riskLevel ?? 'LOW',
             notes: step.notes ?? null,
             estimatedMs: step.estimatedMs ?? null,

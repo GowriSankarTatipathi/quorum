@@ -13,7 +13,7 @@ import { PrismaClient } from '@prisma/client';
  * cached on `globalThis`; without that, each save opens a new pool and the database
  * exhausts its connections within a minute.
  */
-const globalForPrisma = globalThis as unknown as { quorumPrisma?: PrismaClient };
+const globalForPrisma = globalThis as typeof globalThis & { quorumPrisma?: PrismaClient };
 
 function createClient(): PrismaClient {
   const logLevels =

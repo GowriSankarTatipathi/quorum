@@ -8,7 +8,15 @@ import { confidenceToPips } from '@/lib/format';
  * distinction the user is actually acting on — should I check this? — and the exact value
  * is available on hover for anyone who wants it.
  */
-export function ConfidencePips({ confidence }: { confidence: number }) {
+export function ConfidencePips({ confidence }: { confidence: number | null }) {
+  if (confidence === null) {
+    return (
+      <div className="flex items-center gap-1.5 h-6">
+        <span className="text-xs text-ui-text-muted leading-none">not reported</span>
+      </div>
+    );
+  }
+
   const filled = confidenceToPips(confidence);
   const label = `Confidence ${confidence.toFixed(2)} of 1`;
 

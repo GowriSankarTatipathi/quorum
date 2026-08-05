@@ -2,7 +2,7 @@
 
 import { Button, Kbd, cn } from '@quorum/ui';
 import { AlertTriangle, Info, ShieldCheck } from 'lucide-react';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { formatUsd } from '@/lib/format';
 import { approvePlan } from '@/server/runs/actions';
 import type { StepView } from '@/stores/run-store';
@@ -38,14 +38,14 @@ export function PlanReview({
   const irreversible = steps.filter((step) => step.riskLevel === 'HIGH');
   const medium = steps.filter((step) => step.riskLevel === 'MEDIUM');
 
-  const approve = () => {
+  const approve = useCallback(() => {
     setError(null);
     startTransition(() => {
       void approvePlan(runId, planHash).then((result) => {
         if (!result.ok) setError(result.message);
       });
     });
-  };
+  }, [runId, planHash]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,8 +55,7 @@ export function PlanReview({
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, planHash]);
+  }, [approve]);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-5 py-10">
@@ -135,19 +134,33 @@ export function PlanReview({
         </p>
       )}
 
-      <div className="mt-6 flex items-center gap-2">
+      <form
+        action={async () => {
+          const result = await approvePlan(runId, planHash);
+          if (!result.ok) setError(result.message);
+        }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          startTransition(async () => {
+            const result = await approvePlan(runId, planHash);
+            if (!result.ok) setError(result.message);
+          });
+        }}
+        className="mt-6 flex items-center gap-2"
+      >
         <p className="font-mono text-[10px] text-fg-subtle">plan {planHash.slice(0, 12)}</p>
         <Button
+          type="submit"
           variant="primary"
           size="md"
           className="ml-auto"
-          onClick={approve}
           disabled={pending}
         >
           Approve &amp; run
           <Kbd className="border-white/25 bg-white/10 text-white/80">⌘↵</Kbd>
         </Button>
-      </div>
+      </form>
     </div>
   );
 }

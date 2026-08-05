@@ -22,19 +22,18 @@ export function GoalComposer() {
   const [mode, setMode] = useState<AutonomyMode>('BALANCED');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Estimated before commitment, computed locally, with no LLM call — a number the
-  // user sees while deciding is worth more than a precise one they see afterwards.
   const estimate = useMemo(() => estimateRun(goal, mode), [goal, mode]);
-  const ready = goal.trim().length > 12;
 
-  const submit = () => {
-    if (!ready) return;
-    // Creation happens on the server so the API access token never reaches the browser.
-    window.location.assign(`/runs/new?goal=${encodeURIComponent(goal)}&mode=${mode}`);
+  const syncState = () => {
+    if (textareaRef.current && textareaRef.current.value !== goal) {
+      setGoal(textareaRef.current.value);
+    }
   };
 
   return (
-    <div className="w-full max-w-2xl">
+    <form action="/runs/new" method="GET" className="w-full max-w-2xl">
+      <input type="hidden" name="mode" value={mode} />
+      
       <h1 className="mb-8 text-center text-2xl font-medium tracking-tight text-fg">
         What should the agents do?
       </h1>
@@ -45,15 +44,22 @@ export function GoalComposer() {
         </label>
         <textarea
           id="goal"
+          name="goal"
           ref={textareaRef}
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
+          onBlur={syncState}
           onKeyDown={(e) => {
+            syncState();
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault();
-              submit();
+              if (textareaRef.current && textareaRef.current.value.trim().length > 12) {
+                textareaRef.current.form?.submit();
+              }
             }
           }}
+          minLength={13}
+          required
           rows={4}
           placeholder="Get the pricing tiers for Ramp, Brex, Expensify, Navan and Airbase…"
           className="w-full resize-none bg-transparent px-4 py-3.5 text-sm leading-relaxed text-fg outline-none placeholder:text-fg-subtle"
@@ -81,6 +87,7 @@ export function GoalComposer() {
               variant="ghost"
               size="icon"
               className="ml-1"
+              type="button"
               aria-label="Dictate the goal"
               title="Dictate the goal"
             >
@@ -102,7 +109,7 @@ export function GoalComposer() {
                 ? `${estimate.isRough ? '≈' : '~'}$${estimate.estimatedUsd.toFixed(2)} · ${formatDuration(estimate.estimatedSeconds)}`
                 : '—'}
             </span>
-            <Button variant="primary" size="sm" onClick={submit} disabled={!ready}>
+            <Button type="submit" variant="primary" size="sm" onClick={syncState}>
               Plan
               <Kbd className="border-white/25 bg-white/10 text-white/80">⌘↵</Kbd>
               <ArrowRight aria-hidden />
@@ -135,6 +142,6 @@ export function GoalComposer() {
           ))}
         </ul>
       </div>
-    </div>
+    </form>
   );
 }

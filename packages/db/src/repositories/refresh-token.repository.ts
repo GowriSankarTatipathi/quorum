@@ -28,7 +28,7 @@ export const refreshTokenRepository = {
         data: { rotatedAt: new Date() },
       }),
     ]);
-    const next = toRefreshToken(created as Record<string, unknown>);
+    const next = toRefreshToken(created);
     await prisma.refreshToken.update({
       where: { id: currentId },
       data: { replacedById: next.id },

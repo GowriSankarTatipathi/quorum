@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { LlmError } from '../errors.js';
-import { LlmRouter } from '../router.js';
+import { LlmRouter, resolveCandidateModels } from '../router.js';
 import { AnthropicProvider } from './anthropic.js';
 import { startAnthropicReplica, type Replica, type ReplicaResponse } from './anthropic-replica.js';
 import type { CompletionRequest } from './types.js';
@@ -24,7 +24,7 @@ const start = async (...responses: ReplicaResponse[]) => {
 };
 
 const request = (over: Partial<CompletionRequest> = {}): CompletionRequest => ({
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-4-5-20250929',
   system: 'You are the reasoning agent.',
   user: 'Extract the pricing.',
   maxTokens: 1024,
@@ -235,8 +235,10 @@ describe('router over the real provider', () => {
     });
 
     const waits: number[] = [];
+    const providers = { anthropic: new AnthropicProvider('k', replica.url) };
     const router = new LlmRouter({
-      providers: { anthropic: new AnthropicProvider('k', replica.url) },
+      providers,
+      candidates: resolveCandidateModels({}, providers),
       sleep: (ms) => {
         waits.push(ms);
         return Promise.resolve();
@@ -261,8 +263,10 @@ describe('router over the real provider', () => {
         { kind: 'message', text: '{"answer":"eventually"}' },
       ],
     });
+    const providers = { anthropic: new AnthropicProvider('k', replica.url) };
     const router = new LlmRouter({
-      providers: { anthropic: new AnthropicProvider('k', replica.url) },
+      providers,
+      candidates: resolveCandidateModels({}, providers),
       sleep: () => Promise.resolve(),
     });
 
@@ -281,8 +285,10 @@ describe('router over the real provider', () => {
     replica = await startAnthropicReplica({
       responses: [{ kind: 'message', text: '{"wrong":"shape"}' }],
     });
+    const providers = { anthropic: new AnthropicProvider('k', replica.url) };
     const router = new LlmRouter({
-      providers: { anthropic: new AnthropicProvider('k', replica.url) },
+      providers,
+      candidates: resolveCandidateModels({}, providers),
       sleep: () => Promise.resolve(),
     });
 
@@ -293,6 +299,21 @@ describe('router over the real provider', () => {
       ),
     ).rejects.toMatchObject({ name: 'AllProvidersFailedError' });
 
-    expect(replica.requests).toHaveLength(3);
+    expect(replica.requests).toHaveLength(6);
+  });
+});
+
+describe('error text classification', () => {
+  it('classifies upstream capacity messages as RATE_LIMITED', async () => {
+    const provider = await start({
+      kind: 'error',
+      status: 400,
+      message: 'Worker local total request limit reached (32/32)',
+    });
+    
+    await expect(provider.complete(request())).rejects.toMatchObject({
+      errorClass: 'RATE_LIMITED',
+      status: 400,
+    });
   });
 });

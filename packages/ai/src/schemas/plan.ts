@@ -3,18 +3,71 @@ import { z } from 'zod';
 /** Agents a plan step may route through. The Planner cannot invent a pipeline. */
 export const PLAN_AGENTS = ['browser', 'reasoning', 'verification', 'formatter'] as const;
 
+const AGENT_SYNONYMS: Record<string, typeof PLAN_AGENTS[number]> = {
+  extraction: 'reasoning',
+  extract: 'reasoning',
+  extractor: 'reasoning',
+};
+
 export const PlanStepSchema = z.object({
   index: z.number().int().min(0),
   objective: z.string().min(8).max(400),
   /** Null for steps that do no browsing, such as normalising results. */
   targetUrl: z.string().url().nullable(),
-  agentPath: z.array(z.enum(PLAN_AGENTS)).min(1).max(4),
+  agentPath: z
+    .array(
+      z.preprocess((val) => {
+        if (typeof val === 'string') {
+          const mapped = AGENT_SYNONYMS[val.toLowerCase()];
+          if (mapped) {
+            console.warn(`[schema] agentPath normalised: "${val}" -> "${mapped}"`);
+            return mapped;
+          }
+        }
+        return val;
+      }, z.enum(PLAN_AGENTS))
+    )
+    .min(1)
+    .max(4),
   /**
    * The output contract for an extraction step. Declaring it upstream turns a downstream
    * ambiguity into an upstream commitment: the Reasoning agent is validated against it,
    * Verification uses it to know what to check, and the UI renders it as `Expects:`.
    */
-  outputSchema: z.record(z.string(), z.string()).nullable(),
+  outputSchema: z
+    .preprocess((val) => {
+      if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+        const normalised: Record<string, unknown> = {};
+        let changed = false;
+        
+        for (const [key, v] of Object.entries(val)) {
+          if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+            // A weak model might nest objects, either as JSON Schema with a 'type' property
+            // or just by wrapping fields in another object.
+            const obj = v as Record<string, unknown>;
+            if (typeof obj.type === 'string') {
+              normalised[key] = obj.type;
+              changed = true;
+              console.warn(
+                `[schema] outputSchema field "${key}" normalised from nested object to type "${obj.type}"`,
+              );
+            } else {
+              const keysDesc = `{${Object.keys(obj).join(',')}}`;
+              normalised[key] = keysDesc;
+              changed = true;
+              console.warn(
+                `[schema] outputSchema field "${key}" normalised from nested object to description "${keysDesc}"`,
+              );
+            }
+          } else {
+            normalised[key] = v;
+          }
+        }
+        return changed ? normalised : val;
+      }
+      return val;
+    }, z.record(z.string(), z.string()))
+    .nullable(),
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   /** Difficulties predicted before the run starts, e.g. a demo-gated pricing page. */
   notes: z.string().max(400).nullable(),

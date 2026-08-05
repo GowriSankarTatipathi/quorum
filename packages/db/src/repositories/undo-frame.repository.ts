@@ -53,7 +53,7 @@ export const undoFrameRepository = {
       orderBy: { seq: 'desc' },
       select: { seq: true },
     });
-    return row ? Number((row as { seq: number }).seq) + 1 : 0;
+    return row ? Number((row).seq) + 1 : 0;
   },
 
   /**

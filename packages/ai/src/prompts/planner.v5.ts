@@ -1,7 +1,7 @@
 import { PLAN_SCHEMA_DESCRIPTION } from '../schemas/plan.js';
 import { DOMAIN_PRIORS, IDENTITY, JSON_ONLY, UNCERTAINTY_CONTRACT } from './shared/index.js';
 
-export const PLANNER_PROMPT_VERSION = 'planner.v3';
+export const PLANNER_PROMPT_VERSION = 'planner.v5';
 
 export interface PlannerInput {
   goal: string;
@@ -31,6 +31,11 @@ You never browse. You never guess at page contents — you have not seen any.
 3. Declare the output schema for every extraction step. Downstream agents are validated
    against it, so a vague schema causes a real, visible failure later rather than a
    quiet mismatch.
+   CRITICAL: outputSchema MUST be a FLAT map of field name to a short type string.
+   It is NOT JSON Schema. Do not use nesting, and do not use "type" or "items" wrappers.
+   Example: "outputSchema": { "plan_name": "string", "price_per_user_monthly": "number|null" }
+   If you are extracting a list of items (e.g. tiers or products), describe the fields of ONE item.
+   Each extracted item becomes one claim; do not wrap them in an array type.
 4. Mark risk honestly. LOW = a read-only public page. MEDIUM = may be gated, paginated
    or heavily scripted. HIGH = mutates state, submits data, or requires authentication.
 5. If you predict a difficulty — a login wall, a demo gate, infinite scroll — state it in
@@ -39,6 +44,12 @@ You never browse. You never guess at page contents — you have not seen any.
 7. If the goal cannot be achieved by browsing public pages, set "refusal" and return an
    empty plan rather than inventing steps that will fail. Refusing costs seconds;
    discovering it mid-run costs the user money and confidence.
+8. The \`agentPath\` array must only contain the following exact string values:
+   - 'browser': Navigates pages, clicks links, and fills forms.
+   - 'reasoning': Reads and extracts values or answers from a page. There is no 'extraction' agent.
+   - 'verification': Double-checks extracted data against original sources.
+   - 'formatter': Formats final output (e.g. to JSON or CSV).
+   Example of a valid agentPath for extracting a price: ["browser", "reasoning", "verification"]
 </principles>
 
 ${UNCERTAINTY_CONTRACT}

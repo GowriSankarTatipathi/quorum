@@ -14,6 +14,7 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    environment: 'node',
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: 'postgresql://quorum:quorum@localhost:5432/quorum_test',
@@ -22,5 +23,8 @@ export default defineConfig({
       EMAIL_SERVER_HOST: 'localhost',
       EMAIL_SERVER_PORT: '1025',
     },
+  },
+  esbuild: {
+    jsx: 'automatic',
   },
 });

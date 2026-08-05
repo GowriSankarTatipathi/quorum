@@ -107,7 +107,7 @@ export function TimelineScrubber({ events }: { events: StreamEvent[] }) {
         />
       </label>
 
-      <span className="font-mono text-[11px] tabular-nums text-fg-subtle">
+      <span suppressHydrationWarning className="font-mono text-[11px] tabular-nums text-fg-subtle">
         {cursor}/{events.length}
         {current && ` · ${formatEventTime(current.ts, startedAt)}`}
       </span>

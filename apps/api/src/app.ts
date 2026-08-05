@@ -6,6 +6,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import websocket from '@fastify/websocket';
 import { newId } from '@quorum/core';
 import Fastify, {
+  type FastifyBaseLogger,
   type FastifyInstance,
   type RawReplyDefaultExpression,
   type RawRequestDefaultExpression,
@@ -17,14 +18,18 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
-import type { Logger } from 'pino';
+
 import { env } from './env.js';
 import { logger } from './logger.js';
 import authPlugin from './plugins/auth.js';
 import errorHandler from './plugins/error-handler.js';
 import { redis } from './redis.js';
+import { controlRoutes } from './routes/control.js';
+import { exportRoutes } from './routes/exports.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
+import { runRoutes } from './routes/runs.js';
+import { registerWebsocket } from './routes/ws.js';
 
 /**
  * Fastify over Express for one deciding reason: a single Zod schema per route produces
@@ -40,13 +45,18 @@ export type QuorumApp = FastifyInstance<
   RawServerDefault,
   RawRequestDefaultExpression,
   RawReplyDefaultExpression,
-  Logger,
+  FastifyBaseLogger,
   ZodTypeProvider
 >;
 
 export async function buildApp(): Promise<QuorumApp> {
+  // Widening the pino Logger to FastifyBaseLogger at the construction site prevents
+  // Fastify from inferring the narrow pino type for its logger generic, which would
+  // otherwise cause a contravariance mismatch when passing the instance to functions
+  // typed with the default FastifyInstance (e.g. registerWebsocket in ws.ts).
+  const loggerInstance: FastifyBaseLogger = logger;
   const app = Fastify({
-    loggerInstance: logger,
+    loggerInstance,
     // ULID request ids: sortable, and the same id format used for run events, so a
     // request can be correlated with the events it caused.
     genReqId: () => newId(),
@@ -121,6 +131,12 @@ export async function buildApp(): Promise<QuorumApp> {
   );
 
   await app.register(meRoutes, { prefix: '/v1' });
+  await app.register(runRoutes, { prefix: '/v1' });
+  await app.register(controlRoutes, { prefix: '/v1' });
+  await app.register(exportRoutes, { prefix: '/v1' });
+
+  // ws.ts declares its own absolute path (/v1/ws), so it takes no prefix.
+  registerWebsocket(app);
 
   return app;
 }

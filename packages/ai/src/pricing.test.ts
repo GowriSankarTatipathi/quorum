@@ -4,17 +4,17 @@ import { formatUsd, price, priceMicroUsd, sumCosts } from './pricing.js';
 describe('priceMicroUsd', () => {
   it('prices input and output at their distinct rates', () => {
     // sonnet: $3/Mtok in, $15/Mtok out
-    expect(priceMicroUsd('claude-sonnet-4-5', { inputTokens: 1_000_000, outputTokens: 0 })).toBe(
+    expect(priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 1_000_000, outputTokens: 0 })).toBe(
       3_000_000,
     );
-    expect(priceMicroUsd('claude-sonnet-4-5', { inputTokens: 0, outputTokens: 1_000_000 })).toBe(
+    expect(priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 0, outputTokens: 1_000_000 })).toBe(
       15_000_000,
     );
   });
 
   it('discounts cached input tokens and does not double-charge them', () => {
-    const full = priceMicroUsd('claude-sonnet-4-5', { inputTokens: 100_000, outputTokens: 0 });
-    const cached = priceMicroUsd('claude-sonnet-4-5', {
+    const full = priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 100_000, outputTokens: 0 });
+    const cached = priceMicroUsd('claude-sonnet-4-5-20250929', {
       inputTokens: 100_000,
       outputTokens: 0,
       cachedInputTokens: 100_000,
@@ -24,7 +24,7 @@ describe('priceMicroUsd', () => {
   });
 
   it('is exact in integer micro-dollars across many small calls', () => {
-    const one = price('claude-haiku-4-5', { inputTokens: 1_000, outputTokens: 200 });
+    const one = price('claude-haiku-4-5-20251001', { inputTokens: 1_000, outputTokens: 200 });
     const total = sumCosts(Array.from({ length: 35 }, () => one));
     expect(total.usd).toBeCloseTo(one.usd * 35, 10);
     expect(total.inputTokens).toBe(35_000);

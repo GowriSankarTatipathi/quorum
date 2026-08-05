@@ -4,13 +4,14 @@ import { MemoryCacheStore } from './cache.js';
 import { AllProvidersFailedError, LlmError } from './errors.js';
 import { FixtureProvider, type RecordedCompletion } from './providers/fixture.js';
 import type { LlmProvider } from './providers/types.js';
-import { LlmRouter } from './router.js';
+import { LlmRouter, resolveCandidateModels } from './router.js';
 import type {
   LlmCallTelemetry,
   LlmTelemetrySink,
   ProviderFailureTelemetry,
   SchemaViolationTelemetry,
 } from './telemetry.js';
+import type { LlmAgentId, ModelId } from './models.js';
 
 const Schema = z.object({ answer: z.string(), score: z.number() });
 
@@ -55,9 +56,9 @@ const fail = (error: LlmError, times?: number): RecordedCompletion => ({
 });
 
 const transient = () =>
-  new LlmError('RATE_LIMITED', 'slow down', 'anthropic', 'claude-sonnet-4-5', { status: 429 });
+  new LlmError('RATE_LIMITED', 'slow down', 'anthropic', 'claude-sonnet-4-5-20250929', { status: 429 });
 const permanent = () =>
-  new LlmError('AUTH', 'bad key', 'anthropic', 'claude-sonnet-4-5', { status: 401 });
+  new LlmError('AUTH', 'bad key', 'anthropic', 'claude-sonnet-4-5-20250929', { status: 401 });
 
 function makeRouter(
   recordings: RecordedCompletion[],
@@ -65,11 +66,13 @@ function makeRouter(
 ) {
   const provider = new FixtureProvider(recordings);
   const telemetry = new RecordingTelemetry();
+  const candidates = over.candidates ?? resolveCandidateModels({}, { fixture: provider });
   const router = new LlmRouter({
     providers: { fixture: provider },
     telemetry,
     sleep: () => Promise.resolve(),
     random: () => 0.5,
+    candidates,
     ...over,
   });
   return { router, provider, telemetry };
@@ -86,13 +89,52 @@ const call = (router: LlmRouter) =>
     Schema,
   );
 
+describe('resolveCandidateModels', () => {
+  const dummyProvider = {} as LlmProvider;
+
+  it('an override replaces the primary model', () => {
+    const resolved = resolveCandidateModels(
+      { reasoning: 'claude-haiku-4-5-20251001' },
+      { fixture: dummyProvider }
+    );
+    // Overridden primary disables the default fallback.
+    expect(resolved.reasoning).toEqual(['claude-haiku-4-5-20251001']);
+  });
+
+
+
+  it('an empty candidate list raises at construction', () => {
+    // If we have no providers, we have no candidates for reasoning.
+    expect(() =>
+      resolveCandidateModels(
+        { reasoning: 'claude-opus-4-5-20251101' },
+        {}
+      )
+    ).toThrow(/No models available for agent 'planner'/);
+  });
+
+  it('de-duplicates models, preserving order', () => {
+    // Override reasoning to 'claude-haiku-4-5-20251001' which is also its fallback
+    const resolved = resolveCandidateModels(
+      { reasoning: 'claude-haiku-4-5-20251001' },
+      { anthropic: dummyProvider }
+    );
+    expect(resolved.reasoning).toEqual(['claude-haiku-4-5-20251001']);
+  });
+
+  it('no override leaves MODEL_POLICY behaviour unchanged', () => {
+    const resolved = resolveCandidateModels({}, { anthropic: dummyProvider });
+    expect(resolved.reasoning).toEqual(['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001']);
+  });
+});
+
 describe('happy path', () => {
   it('returns validated data with cost and model attribution', async () => {
     const { router, telemetry } = makeRouter([ok('{"answer":"yes","score":1}')]);
     const result = await call(router);
 
     expect(result.data).toEqual({ answer: 'yes', score: 1 });
-    expect(result.model).toBe('claude-sonnet-4-5');
+    expect(result.model).toBe('claude-sonnet-4-5-20250929');
     expect(result.cached).toBe(false);
     expect(result.fallbackUsed).toBe(false);
     expect(result.cost.usd).toBeGreaterThan(0);
@@ -142,7 +184,7 @@ describe('retry and fallback', () => {
     expect(result.data.answer).toBe('fallback');
     expect(result.fallbackUsed).toBe(true);
     expect(telemetry.fallbacks).toHaveLength(1);
-    expect(telemetry.fallbacks[0]?.to).toBe('gpt-5.1');
+    expect(telemetry.fallbacks[0]?.to).toBe('claude-haiku-4-5-20251001');
   });
 
   it('throws AllProvidersFailedError listing every model it tried', async () => {
@@ -154,8 +196,8 @@ describe('retry and fallback', () => {
       await call(router);
     } catch (error) {
       const attempts = (error as AllProvidersFailedError).attempts;
-      expect(attempts.map((a) => a.model)).toContain('claude-sonnet-4-5');
-      expect(attempts.map((a) => a.model)).toContain('gpt-5.1');
+      expect(attempts.map((a) => a.model)).toContain('claude-sonnet-4-5-20250929');
+      expect(attempts.map((a) => a.model)).toContain('claude-haiku-4-5-20251001');
     }
   });
 });
@@ -211,10 +253,11 @@ describe('caching', () => {
   it('does not cache sampled calls, so Critic diversity survives', async () => {
     const cache = new MemoryCacheStore();
     const provider = new FixtureProvider([ok('{"answer":"a","score":1}')]);
-    const router = new LlmRouter({ providers: { fixture: provider }, cache });
+    const candidates = resolveCandidateModels({}, { fixture: provider });
+    const router = new LlmRouter({ providers: { fixture: provider }, cache, candidates });
     const input = {
       agent: 'critic' as const,
-      promptVersion: 'critic.v3',
+      promptVersion: 'critic.v4',
       system: 's',
       user: 'u',
     };
@@ -232,7 +275,7 @@ describe('caching', () => {
     // Simulate a schema change by seeding the cache with a now-invalid shape.
     const { cacheKey } = await import('./cache.js');
     const staleKey = await cacheKey('reasoning', {
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-5-20250929',
       system: 'system',
       user: 'user',
       maxTokens: 4096,
@@ -250,7 +293,8 @@ describe('caching', () => {
 
 describe('provider configuration', () => {
   it('reports CONFIG (not AUTH) when no provider is configured for a model', async () => {
-    const router = new LlmRouter({ providers: {} });
+    // Deliberately passing invalid candidates (no provider) to test LlmRouter directly.
+    const router = new LlmRouter({ providers: {}, candidates: { reasoning: ['claude-sonnet-4-5-20250929'] } as Record<LlmAgentId, ModelId[]> });
     try {
       await call(router);
       expect.unreachable('should have thrown');
@@ -263,7 +307,7 @@ describe('provider configuration', () => {
 
   it('routes to the vendor that owns the model when no fixture is present', async () => {
     const seen: string[] = [];
-    const stub = (name: 'anthropic' | 'openai'): LlmProvider => ({
+    const stub = (name: 'anthropic'): LlmProvider => ({
       name,
       complete: (request) => {
         seen.push(`${name}:${request.model}`);
@@ -276,11 +320,11 @@ describe('provider configuration', () => {
         });
       },
     });
-    const router = new LlmRouter({
-      providers: { anthropic: stub('anthropic'), openai: stub('openai') },
-    });
+    const providers = { anthropic: stub('anthropic') };
+    const candidates = resolveCandidateModels({}, providers);
+    const router = new LlmRouter({ providers, candidates });
     await call(router);
-    expect(seen).toEqual(['anthropic:claude-sonnet-4-5']);
+    expect(seen).toEqual(['anthropic:claude-sonnet-4-5-20250929']);
   });
 });
 
@@ -288,7 +332,7 @@ describe('model overrides', () => {
   it('uses the env override as primary instead of MODEL_POLICY', async () => {
     const seen: string[] = [];
     const stub: LlmProvider = {
-      name: 'openai',
+      name: 'anthropic',
       complete: (request) => {
         seen.push(request.model);
         return Promise.resolve({
@@ -300,19 +344,18 @@ describe('model overrides', () => {
         });
       },
     };
-    const router = new LlmRouter({
-      providers: { openai: stub },
-      modelOverrides: { reasoning: 'gpt-5.1-mini' },
-    });
+    const providers = { anthropic: stub };
+    const candidates = resolveCandidateModels({ reasoning: 'claude-haiku-4-5-20251001' }, providers);
+    const router = new LlmRouter({ providers, candidates });
     const result = await call(router);
-    expect(seen).toEqual(['gpt-5.1-mini']);
-    expect(result.model).toBe('gpt-5.1-mini');
+    expect(seen).toEqual(['claude-haiku-4-5-20251001']);
+    expect(result.model).toBe('claude-haiku-4-5-20251001');
     expect(result.data.answer).toBe('overridden');
   });
 
   it('falls back to MODEL_POLICY.primary when no override is set', async () => {
     const { router } = makeRouter([ok('{"answer":"default","score":1}')]);
     const result = await call(router);
-    expect(result.model).toBe('claude-sonnet-4-5');
+    expect(result.model).toBe('claude-sonnet-4-5-20250929');
   });
 });

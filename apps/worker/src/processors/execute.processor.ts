@@ -8,6 +8,7 @@ import { env } from '../env.js';
 import { logger } from '../logger.js';
 import { browserDriver, sessionPool } from '../services/browser.js';
 import { eventPublisher, newCorrelation } from '../services/event-publisher.js';
+import { getStorage, hasStorage } from '../services/storage.js';
 
 export interface ExecuteJobData {
   runId: string;
@@ -62,15 +63,57 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
     allowedHosts: board.allowedHosts,
     respectRobotsTxt: env.RESPECT_ROBOTS_TXT,
   });
-  await runRepository.attachSession(runId, session.id, session.liveViewUrl);
-  await eventPublisher.emit(
-    'browser.session.opened',
-    { sessionId: session.id, driver: browserDriver.kind, liveViewUrl: session.liveViewUrl },
-    { runId, agent: 'browser' },
-  );
 
   const sessionStartedAt = Date.now();
+  let streamActive = true;
+  let streamPromise: Promise<void> | null = null;
+
   try {
+    await runRepository.attachSession(runId, session.id, session.liveViewUrl);
+    await eventPublisher.emit(
+      'browser.session.opened',
+      { sessionId: session.id, driver: browserDriver.kind, liveViewUrl: session.liveViewUrl },
+      { runId, agent: 'browser' },
+    );
+
+    streamPromise = (async () => {
+      logger.info({ runId }, 'Screenshot loop started');
+      if (!hasStorage()) {
+        logger.info({ runId }, 'Screenshot skipped: hasStorage() is false');
+      } else {
+        try {
+          const cleanup = await browserDriver.streamScreencast(session, (buffer) => {
+            if (!streamActive) return;
+            // Fire and forget storage to keep the CDP channel moving
+            void (async () => {
+              try {
+                const key = `runs/${runId}/stream/${Date.now()}.jpg`;
+                const storage = getStorage();
+                await storage.put(key, buffer, 'image/jpeg');
+                const url = await storage.signedUrl(key, 600, 'screenshot.jpg');
+                await eventPublisher.emit(
+                  'browser.screenshot',
+                  { key, url, width: 1280, height: 800 },
+                  { runId, agent: 'browser' },
+                );
+                logger.info({ runId, key }, 'Frame captured and published');
+              } catch (_error) {
+                logger.error({ runId, err: _error }, 'Error capturing/publishing frame');
+              }
+            })();
+          });
+
+          // Block until the run finishes, then tear down the stream
+          while (streamActive) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          await cleanup();
+        } catch (_error) {
+          logger.error({ runId, err: _error }, 'Failed to start screencast stream');
+        }
+      }
+      logger.info({ runId }, 'Screenshot loop teardown');
+    })();
     for (const step of steps) {
       if (step.status === 'DONE' || step.status === 'SKIPPED') continue;
       sessionPool.touch(session.id);
@@ -98,14 +141,36 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
         );
       }
 
-      const outcome = await executeStep(step, {
-        runId,
-        orgId: run.orgId,
-        mode: run.mode,
-        allowedHosts: board.allowedHosts,
-        session,
-        budgetRemainingUsd: () => governor.remainingUsd({ ...board.budget, spentMicroUsd: spent }),
-      });
+      let outcome;
+      try {
+        outcome = await executeStep(step, {
+          runId,
+          orgId: run.orgId,
+          mode: run.mode,
+          allowedHosts: board.allowedHosts,
+          session,
+          budgetRemainingUsd: () => governor.remainingUsd({ ...board.budget, spentMicroUsd: spent }),
+        });
+      } catch (error) {
+        // We do not have LlmError directly imported here, but we can check name/properties,
+        // or just consider standard errors. Actually we can import LlmError if needed, but
+        // for now let's just check if it's explicitly transient.
+        // If it's a known non-transient or a generic crash, fail the run cleanly.
+        const isTransient = error && typeof error === 'object' && 'transient' in error && error.transient === true;
+        if (isTransient) {
+          logger.warn({ runId, err: error }, 'Transient error during step execution, rethrowing for retry');
+          throw error; // Let BullMQ retry
+        }
+
+        logger.error({ runId, err: error }, 'Terminal error during step execution, failing run');
+        await setStatus(runId, 'EXECUTING', 'FAILED');
+        await eventPublisher.emit(
+          'run.failed',
+          { code: 'E_AGENT_FAILED', humanMessage: error instanceof Error ? error.message : String(error) },
+          { runId }
+        );
+        return;
+      }
 
       if (outcome.kind === 'paused') {
         await setStatus(runId, 'EXECUTING', 'PAUSED');
@@ -152,13 +217,39 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
 
     logger.info({ runId, critiques: critiques.length, blocked }, 'run execution finished');
   } finally {
+    streamActive = false;
+    if (streamPromise) await streamPromise;
+
+    let finalFrameUrl: string | undefined;
+    let finalFrameKey: string | undefined;
+    if (hasStorage()) {
+      try {
+        const buffer = await browserDriver.screenshot(session, { quality: 80 });
+        finalFrameKey = `runs/${runId}/final-${Date.now()}.jpg`;
+        const storage = getStorage();
+        await storage.put(finalFrameKey, buffer, 'image/jpeg');
+        finalFrameUrl = await storage.signedUrl(finalFrameKey, 604800, 'screenshot.jpg');
+      } catch (err) {
+        logger.warn({ runId, err }, 'Failed to capture final frame');
+      }
+    }
+
     await sessionPool.release(session.id);
     await eventPublisher.emit(
       'browser.session.closed',
-      { sessionId: session.id, durationMs: Date.now() - sessionStartedAt },
+      { sessionId: session.id, durationMs: Date.now() - sessionStartedAt, finalFrameUrl, finalFrameKey },
       { runId, agent: 'browser' },
     );
     eventPublisher.release(runId);
+
+    const currentRun = await runRepository.findById(runId);
+    if (currentRun && (currentRun.status === 'COMPLETED' || currentRun.status === 'FAILED' || currentRun.status === 'CANCELLED')) {
+      if (hasStorage()) {
+        await getStorage().deletePrefix(`runs/${runId}/stream/`).catch((err) => {
+          logger.warn({ runId, err }, 'Failed to clean up stream frames');
+        });
+      }
+    }
   }
 }
 

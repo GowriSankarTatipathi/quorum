@@ -92,6 +92,11 @@ export const RUN_EVENT_TYPES = [
 
 export type RunEventType = (typeof RUN_EVENT_TYPES)[number];
 
+/**
+ * Event types that are broadcast for live telemetry but MUST NOT be persisted to the database.
+ */
+export const TRANSIENT_EVENTS = new Set<RunEventType>(['browser.screenshot']);
+
 export interface CostFragment {
   inputTokens: number;
   outputTokens: number;
@@ -160,7 +165,7 @@ export interface RunEventPayloads extends Record<RunEventType, unknown> {
   'browser.screenshot': { key: string; url: string; width: number; height: number };
   'browser.dom.snapshot': { key: string; contentHash: string; nodeCount: number };
   'browser.noop_detected': { action: { type: string }; ref: number | null };
-  'browser.session.closed': { sessionId: string; durationMs: number };
+  'browser.session.closed': { sessionId: string; durationMs: number; finalFrameUrl?: string; finalFrameKey?: string };
 
   'claim.created': {
     claimId: string;
@@ -168,10 +173,10 @@ export interface RunEventPayloads extends Record<RunEventType, unknown> {
     field: string;
     value: unknown;
     unit: string | null;
-    confidence: number;
+    confidence: number | null;
     sourceUrl: string;
   };
-  'claim.verified': { claimId: string; verdict: ClaimStatus; confidence: number };
+  'claim.verified': { claimId: string; verdict: ClaimStatus; confidence: number | null };
   'claim.contradicted': { claimId: string; claimed: unknown; independentReading: unknown };
   'claim.superseded': { claimId: string; supersededBy: string; reason: string };
   'claim.corrected': { claimId: string; newClaimId: string; correctedBy: string };

@@ -19,7 +19,7 @@ export interface BrowserAgentContext {
 export interface BrowserAgentDecision {
   action: BrowserAction;
   reasoning: string;
-  confidence: number;
+  confidence: number | null;
 }
 
 /**

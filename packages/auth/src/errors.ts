@@ -30,6 +30,13 @@ export class AuthError extends Error {
 export const tokenExpired = (): AuthError =>
   new AuthError('E_TOKEN_EXPIRED', 'access token expired', 'Your session expired. Sign in again.');
 
+export const tokenMalformed = (): AuthError =>
+  new AuthError(
+    'E_TOKEN_MALFORMED',
+    'token payload is malformed or missing claims',
+    'Your session could not be verified. Sign in again.',
+  );
+
 export const tokenRevoked = (): AuthError =>
   new AuthError(
     'E_TOKEN_REVOKED',

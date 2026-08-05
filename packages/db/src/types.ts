@@ -227,7 +227,7 @@ export interface ClaimRecord {
   extractedAt: Date;
   extractedBy: string;
   promptVersion: string;
-  confidence: number;
+  confidence: number | null;
   status: ClaimStatus;
   ambiguity: string | null;
   nullReason: string | null;
@@ -248,7 +248,7 @@ export interface CreateClaimInput {
   domSnapshotKey?: string | null;
   extractedBy: string;
   promptVersion: string;
-  confidence: number;
+  confidence: number | null;
   ambiguity?: string | null;
   nullReason?: string | null;
 }
@@ -259,7 +259,7 @@ export interface VerdictRecord {
   verdict: ClaimStatus;
   independentReading: unknown;
   rationale: string | null;
-  confidence: number;
+  confidence: number | null;
   model: string;
   createdAt: Date;
 }
@@ -269,7 +269,7 @@ export interface CreateVerdictInput {
   verdict: ClaimStatus;
   independentReading?: unknown;
   rationale?: string | null;
-  confidence: number;
+  confidence: number | null;
   model: string;
 }
 

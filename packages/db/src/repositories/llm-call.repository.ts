@@ -1,3 +1,4 @@
+
 import { prisma } from '../client.js';
 import { decimalToMicroUsd, microUsdToDecimalString } from '../money.js';
 import type { CreateLlmCallInput, LlmCallRecord } from '../types.js';
@@ -44,32 +45,24 @@ export const llmCallRepository = {
   ): Promise<
     { promptVersion: string; model: string; calls: number; violations: number; microUsd: number }[]
   > {
-    const rows: unknown[] = await prisma.llmCall.groupBy({
+    const rows = await prisma.llmCall.groupBy({
       by: ['promptVersion', 'model'],
       where: { agent, createdAt: { gte: since } },
       _count: { _all: true },
       _sum: { costUsd: true },
     });
-
-    const violations: unknown[] = await prisma.llmCall.groupBy({
+    const violations = await prisma.llmCall.groupBy({
       by: ['promptVersion', 'model'],
       where: { agent, createdAt: { gte: since }, schemaViolation: true },
       _count: { _all: true },
     });
 
     const violationCount = new Map<string, number>();
-    for (const raw of violations) {
-      const r = raw as { promptVersion: string; model: string; _count: { _all: number } };
-      violationCount.set(`${r.promptVersion}::${r.model}`, Number(r._count._all));
+    for (const v of violations) {
+      violationCount.set(`${v.promptVersion}::${v.model}`, Number(v._count._all));
     }
 
-    return rows.map((raw) => {
-      const r = raw as {
-        promptVersion: string;
-        model: string;
-        _count: { _all: number };
-        _sum: { costUsd: unknown };
-      };
+    return rows.map((r) => {
       return {
         promptVersion: r.promptVersion,
         model: r.model,

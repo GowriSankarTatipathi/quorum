@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 // Read at build time so the policy names the exact origins this deployment talks to.
 const apiOrigin = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const wsOrigin = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:3001';
+const isDev = process.env.NODE_ENV !== 'production';
 
 const config: NextConfig = {
   reactStrictMode: true,
@@ -18,23 +19,51 @@ const config: NextConfig = {
      * this application displays pages it does not control, so the blast radius of a
      * permissive policy is larger here than in an ordinary app.
      */
+    const scriptSrc = [
+      "script-src 'self' 'unsafe-inline'",
+      // React Fast Refresh and the dev bundler evaluate code at runtime. Without this the
+      // browser refuses to execute the client bundle at all in development — the page
+      // renders from SSR and then nothing hydrates, no hooks run, and no WebSocket is
+      // ever opened. Production builds do not need it and must not have it.
+      isDev ? "'unsafe-eval'" : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const connectSrc = [
+      "connect-src 'self'",
+      apiOrigin,
+      wsOrigin,
+      // A browser treats localhost and 127.0.0.1 as different origins, and the two are
+      // used interchangeably in local config. Allow both rather than depending on which
+      // spelling happens to be in .env.local.
+      isDev ? 'http://localhost:3001 ws://localhost:3001' : '',
+      isDev ? 'http://127.0.0.1:3001 ws://127.0.0.1:3001' : '',
+      // The dev server's own HMR socket.
+      isDev ? 'ws://localhost:3000 ws://127.0.0.1:3000' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     const csp = [
       "default-src 'self'",
-      // Next injects inline bootstrap scripts; styles come from Tailwind's runtime layer.
-      "script-src 'self' 'unsafe-inline'",
+      scriptSrc,
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       // Screenshot frames arrive as blobs and data urls from the event stream.
       "img-src 'self' data: blob:",
-      `connect-src 'self' ${apiOrigin} ${wsOrigin}`,
+      connectSrc,
       // Only the managed browser vendor may be framed, and only when configured.
       "frame-src 'self' https://*.browserbase.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",
-      'upgrade-insecure-requests',
-    ].join('; ');
+      // Would rewrite http://localhost:3001 to https in development.
+      isDev ? '' : 'upgrade-insecure-requests',
+    ]
+      .filter(Boolean)
+      .join('; ');
 
     return [
       {
@@ -45,10 +74,14 @@ const config: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
-          },
+          ...(isDev
+            ? []
+            : [
+              {
+                key: 'Strict-Transport-Security',
+                value: 'max-age=63072000; includeSubDomains; preload',
+              },
+            ]),
         ],
       },
     ];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLANNER_PROMPT_VERSION, buildPlannerPrompt } from './planner.v3.js';
+import { PLANNER_PROMPT_VERSION, buildPlannerPrompt } from './planner.v5.js';
 import { PROMPT_REGISTRY } from './registry.js';
 
 const base = {
@@ -21,6 +21,15 @@ describe('buildPlannerPrompt', () => {
     expect(prompt.user).toContain('ramp.com, brex.com');
     expect(prompt.user).toContain('max_budget_usd: 0.50');
     expect(prompt.user).toContain('max_steps: 20');
+  });
+
+  it('enumerates all four allowed agent names to prevent Zod drift', () => {
+    const prompt = buildPlannerPrompt(base);
+    expect(prompt.system).toContain("'browser':");
+    expect(prompt.system).toContain("'reasoning':");
+    expect(prompt.system).toContain("'verification':");
+    expect(prompt.system).toContain("'formatter':");
+    expect(prompt.system).toContain("There is no 'extraction' agent");
   });
 
   it('says "any public https site" rather than leaving the field blank', () => {

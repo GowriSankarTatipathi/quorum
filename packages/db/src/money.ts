@@ -72,6 +72,7 @@ export function microUsdToNumber(micros: number): number {
 }
 
 /** Confidence is DECIMAL(4,3) — three decimal places, so this is exact within a double. */
-export function decimalToConfidence(value: DecimalLike): number {
+export function decimalToConfidence(value: DecimalLike): number | null {
+  if (value == null) return null;
   return decimalToMicroUsd(value) / MICRO_PER_USD;
 }

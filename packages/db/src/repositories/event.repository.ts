@@ -88,7 +88,7 @@ export const eventRepository = {
       orderBy: { seq: 'desc' },
       select: { seq: true },
     });
-    return row ? Number((row as { seq: bigint }).seq) : 0;
+    return row ? Number((row).seq) : 0;
   },
 
   async countForRun(runId: string): Promise<number> {

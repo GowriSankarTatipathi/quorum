@@ -36,6 +36,8 @@ const EnvSchema = z.object({
   R2_BUCKET: z.string().default('quorum-artifacts'),
   R2_ENDPOINT: z.string().optional(),
   ARTIFACT_BASE_URL: z.string().default('https://artifacts.quorum.app'),
+  ARTIFACT_ROOT: z.string().optional(),
+  ARTIFACT_SIGNING_SECRET: z.string().optional(),
 
   WORKER_HEARTBEAT_MS: z.coerce.number().int().positive().default(10_000),
 });

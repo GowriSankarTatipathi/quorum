@@ -1,3 +1,4 @@
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import type { RecipeRecord } from '../types.js';
 import { toRecipe } from './runtime-mappers.js';
@@ -17,8 +18,8 @@ export const recipeRepository = {
         orgId: input.orgId,
         name: input.name,
         goalTemplate: input.goalTemplate,
-        planTemplate: input.planTemplate,
-        corrections: input.corrections ?? undefined,
+        planTemplate: input.planTemplate as Prisma.InputJsonValue, // Prisma requires InputJsonValue for json fields
+        corrections: (input.corrections ?? undefined) as Prisma.InputJsonValue | undefined, // Prisma requires InputJsonValue for json fields
       },
     });
     return toRecipe(row);
@@ -52,7 +53,7 @@ export const recipeRepository = {
     return toRecipe(
       await prisma.recipe.update({
         where: { id },
-        data: { corrections: { ...previous, ...corrections } },
+        data: { corrections: { ...previous, ...corrections } as Prisma.InputJsonValue }, // Prisma requires InputJsonValue for json fields
       }),
     );
   },

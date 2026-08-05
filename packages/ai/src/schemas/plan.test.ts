@@ -47,9 +47,69 @@ describe('PlanSchema', () => {
   });
 
   it('rejects an agent that is not part of the pipeline', () => {
-    expect(PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['hacker'] })] })).success).toBe(
-      false,
-    );
+    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['hacker'] })] }));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/Invalid enum value/);
+    }
+  });
+
+  it('normalises known synonyms like "extraction" to "reasoning"', () => {
+    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['browser', 'extraction'] })] }));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.steps[0]?.agentPath).toEqual(['browser', 'reasoning']);
+    }
+  });
+
+  it('allows canonical values to pass untouched', () => {
+    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['browser', 'reasoning'] })] }));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.steps[0]?.agentPath).toEqual(['browser', 'reasoning']);
+    }
+  });
+
+  it('rejects unknown synonyms like "summarizer"', () => {
+    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['browser', 'summarizer'] })] }));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/Invalid enum value/);
+    }
+  });
+
+  it('normalises a nested JSON-Schema-shaped outputSchema to flat strings', () => {
+    const nestedSchema = {
+      tiers: { type: 'array', items: { name: 'string', price: 'number' } },
+      metadata: { items: 'number', extra: 'string' }
+    };
+    const result = PlanSchema.safeParse(plan({ steps: [step({ outputSchema: nestedSchema })] }));
+    
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.steps[0]?.outputSchema).toEqual({
+        tiers: 'array',
+        metadata: '{items,extra}'
+      });
+    }
+  });
+
+  it('allows a flat outputSchema map to pass through untouched', () => {
+    const flatSchema = { plan_name: 'string', price_per_user_monthly: 'number|null' };
+    const result = PlanSchema.safeParse(plan({ steps: [step({ outputSchema: flatSchema })] }));
+    
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.steps[0]?.outputSchema).toEqual(flatSchema);
+    }
+  });
+
+  it('rejects an outputSchema value that is neither string nor object', () => {
+    const result = PlanSchema.safeParse(plan({ steps: [step({ outputSchema: { tiers: 123 } })] }));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/Expected string, received number/);
+    }
   });
 
   it('rejects an empty plan, which must be expressed as a refusal instead', () => {

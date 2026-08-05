@@ -50,6 +50,18 @@ describe('claimDisposition', () => {
     expect(claimDisposition(claim({ confidence: 0.7 }))).toBe('FLAG');
   });
 
+  it('sends a null confidence claim to review (not reported)', () => {
+    expect(claimDisposition(claim({ confidence: null }))).toBe('HUMAN_REVIEW');
+  });
+
+  it('sends a zero confidence claim to review (reported as 0)', () => {
+    expect(claimDisposition(claim({ confidence: 0 }))).toBe('HUMAN_REVIEW');
+  });
+
+  it('accepts a grounded claim with 0.9 confidence', () => {
+    expect(claimDisposition(claim({ confidence: 0.9 }))).toBe('ACCEPT');
+  });
+
   it('flags an ambiguous verdict', () => {
     expect(claimDisposition(claim({ verdicts: verdicts('AMBIGUOUS') }))).toBe('FLAG');
   });

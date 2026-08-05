@@ -10,7 +10,7 @@ import type { ClaimStatus, Disposition } from '../enums.js';
  */
 
 export interface DispositionInput {
-  confidence: number;
+  confidence: number | null;
   status: ClaimStatus;
   /** False when the claim's `sourceText` does not appear in the captured DOM. */
   grounded: boolean;
@@ -37,6 +37,9 @@ export function claimDisposition(
   // not on the page, the model did not read it — no confidence score and no verifier
   // opinion can rehabilitate that.
   if (!input.grounded) return 'QUARANTINE';
+
+  if (input.confidence === null) return 'HUMAN_REVIEW';
+
 
   if (input.status === 'HUMAN_CORRECTED') return 'ACCEPT';
   if (input.status === 'SUPERSEDED') return 'QUARANTINE';
@@ -75,11 +78,12 @@ export function explainDisposition(disposition: Disposition): string | null {
  * marginal gain on claims that were already unambiguous.
  */
 export function shouldVerify(
-  confidence: number,
+  confidence: number | null,
   sampleRate: number,
   random: number,
   policy: DispositionPolicy = DEFAULT_DISPOSITION_POLICY,
 ): boolean {
+  if (confidence === null) return true;
   if (confidence < policy.flagBelowConfidence) return true;
   return random < sampleRate;
 }

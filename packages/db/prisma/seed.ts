@@ -1,5 +1,4 @@
-/* eslint-disable no-console */
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 /**
  * Deterministic development seed.
@@ -99,13 +98,13 @@ const TIERS: SeedTier[] = [
 ];
 
 async function main(): Promise<void> {
-  console.log('seeding demo workspace…');
+  process.stdout.write('seeding demo workspace…\n');
 
   const existing = await prisma.org.findUnique({ where: { slug: ORG_SLUG } });
   if (existing) {
     // Cascades remove every run, step, claim and event beneath it.
     await prisma.org.delete({ where: { id: existing.id } });
-    console.log('  removed previous demo workspace');
+    process.stdout.write('  removed previous demo workspace\n');
   }
 
   const org = await prisma.org.create({
@@ -199,7 +198,7 @@ async function main(): Promise<void> {
         stepId: step.id,
         entity: tier.entity,
         field: `price_per_user_monthly.${tier.plan.toLowerCase()}`,
-        value: tier.price,
+        value: tier.price as Prisma.InputJsonValue,
         unit: tier.annualBasis ? 'USD/user/month (billed annually)' : 'USD/user/month',
         sourceUrl: tier.sourceUrl,
         sourceText: tier.sourceText,
@@ -282,15 +281,15 @@ async function main(): Promise<void> {
   });
 
   const claimCount = await prisma.claim.count({ where: { step: { runId: run.id } } });
-  console.log(`  workspace ${org.slug}`);
-  console.log(`  owner     ${owner.email}`);
-  console.log(`  run       ${run.id} (${String(claimCount)} claims, 1 blocking critique)`);
-  console.log('seed complete.');
+  process.stdout.write(`  workspace ${org.slug}\n`);
+  process.stdout.write(`  owner     ${owner.email}\n`);
+  process.stdout.write(`  run       ${run.id} (${String(claimCount)} claims, 1 blocking critique)\n`);
+  process.stdout.write('seed complete.\n');
 }
 
 main()
   .catch((error: unknown) => {
-    console.error('seed failed', error);
+    process.stderr.write(`seed failed: ${String(error)}\n`);
     process.exitCode = 1;
   })
   .finally(() => {

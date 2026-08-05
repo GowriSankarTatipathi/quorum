@@ -18,16 +18,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // Dark by default: the primary screen is a browser viewport (mostly white)
     // surrounded by chrome, and a dark surround makes the page the visual subject.
-    <html lang="en" className="dark">
-      <body className="min-h-dvh bg-base text-fg antialiased">
+    <html lang="en" className="dark" suppressHydrationWarning>
+      {/* Extensions such as Grammarly inject data-gr-* attributes into html and body
+          after the server HTML lands but before hydration. The app cannot prevent it,
+          and the suppression is scoped to these two elements only — real mismatches
+          anywhere inside the tree still surface. */}
+      <body className="min-h-dvh bg-base text-fg antialiased" suppressHydrationWarning>
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-[var(--color-overlay)] focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-[var(--color-overlay)] focus:px-3 focus:py-2"
         >
-          Skip to content
-        </a>
-        {children}
-      </body>
-    </html>
+        Skip to content
+      </a>
+      {children}
+    </body>
+    </html >
   );
 }

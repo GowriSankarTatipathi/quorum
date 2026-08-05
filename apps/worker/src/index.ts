@@ -10,6 +10,7 @@ import { QUEUE_NAMES, closeQueues } from './queues.js';
 import { connection, checkRedis, closeRedis } from './redis.js';
 import { sessionPool } from './services/browser.js';
 import { hasLiveProvider, logLlmMode } from './services/llm.js';
+import { loadLlmConfig } from '@quorum/ai';
 
 /**
  * Worker bootstrap.
@@ -20,11 +21,21 @@ import { hasLiveProvider, logLlmMode } from './services/llm.js';
  * broken machine.
  */
 async function main(): Promise<void> {
+  // Debug check: where are the stale config variables coming from?
+  const suspiciousEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => k.startsWith('OPENAI_') || k.startsWith('QUORUM_'))
+  );
+  if (Object.keys(suspiciousEnv).length > 0) {
+    logger.warn({ suspiciousEnv }, 'Found suspicious environment variables at startup. These may be overriding the clean .env.local!');
+  }
+
   logger.info(
     {
       driver: env.BROWSER_DRIVER,
       maxSessions: env.MAX_CONCURRENT_SESSIONS,
       budgetUsd: env.DEFAULT_RUN_BUDGET_USD,
+      verificationSampleRate: env.VERIFICATION_SAMPLE_RATE,
+      maxRecoveryAttempts: env.MAX_RECOVERY_ATTEMPTS_PER_RUN,
     },
     'quorum worker starting',
   );
@@ -33,12 +44,29 @@ async function main(): Promise<void> {
   if (!database.ok) throw new Error('Database is unreachable; refusing to join the worker pool.');
   if (!redisCheck.ok) throw new Error('Redis is unreachable; refusing to join the worker pool.');
   logLlmMode();
-  if (!hasLiveProvider()) {
+  const llmConfig = loadLlmConfig();
+  if (llmConfig.mode === 'live' && !hasLiveProvider()) {
     throw new Error(
-      'No LLM provider key found. Export ANTHROPIC_API_KEY (or OPENAI_API_KEY) before starting the worker — a worker that claims jobs it cannot run is worse than one that never started. To exercise the pipeline without a vendor, use `pnpm e2e`.',
+      'No LLM provider key found. Export ANTHROPIC_API_KEY before starting the worker — a worker that claims jobs it cannot run is worse than one that never started. To exercise the pipeline without a vendor, use `pnpm e2e`.',
     );
   }
-  logger.info({ database, redis: redisCheck }, 'dependencies healthy');
+  
+  logger.info(
+    { 
+      database, 
+      redis: redisCheck,
+      llm: {
+        mode: llmConfig.mode,
+        providers: [
+          llmConfig.anthropic ? 'anthropic' : null,
+
+        ].filter(Boolean),
+        overrides: llmConfig.modelOverrides,
+        provenance: llmConfig.provenance,
+      }
+    }, 
+    'dependencies healthy'
+  );
 
   heartbeat.start();
 

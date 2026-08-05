@@ -1,40 +1,95 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
-  "globalDependencies": [".env", ".env.local"],
+  "globalDependencies": [
+    ".env",
+    ".env.local"
+  ],
   "globalEnv": [
+    "QUORUM_*",
+    "EMAIL_*",
+    "R2_*",
+    "AUTH_*",
+    "NEXT_PUBLIC_*",
+    "BROWSERBASE_*",
+    "GOOGLE_*",
+    "ANTHROPIC_*",
+    "OPENAI_*",
+    "LLM_*",
     "NODE_ENV",
     "DATABASE_URL",
     "DIRECT_URL",
     "REDIS_URL",
+    "PORT",
+    "HOST",
+    "LOG_LEVEL",
     "JWT_SECRET",
-    "NEXTAUTH_SECRET",
-    "NEXTAUTH_URL",
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
+    "WEB_ORIGIN",
+    "RATE_LIMIT_MAX",
+    "RATE_LIMIT_WINDOW",
+    "MAX_CONCURRENT_SESSIONS",
+    "MAX_RUN_DURATION_MS",
+    "DEFAULT_RUN_BUDGET_USD",
+    "MAX_RECOVERY_ATTEMPTS_PER_STEP",
+    "MAX_RECOVERY_ATTEMPTS_PER_RUN",
+    "VERIFICATION_SAMPLE_RATE",
+    "APPROVAL_TIMEOUT_S",
+    "MAX_PLAN_STEPS",
     "BROWSER_DRIVER",
-    "BROWSERBASE_API_KEY",
-    "BROWSERBASE_PROJECT_ID",
-    "R2_ACCOUNT_ID",
-    "R2_ACCESS_KEY_ID",
-    "R2_SECRET_ACCESS_KEY",
-    "R2_BUCKET",
+    "SESSION_IDLE_TIMEOUT_MS",
+    "MAX_BROWSER_ATTEMPTS_PER_STEP",
+    "RESPECT_ROBOTS_TXT",
+    "ARTIFACT_BASE_URL",
+    "WORKER_HEARTBEAT_MS",
+    "ACCESS_TOKEN_TTL_S",
+    "REFRESH_TOKEN_TTL_S",
     "SENTRY_DSN",
     "AXIOM_TOKEN",
-    "LOG_LEVEL",
-    "NEXT_PUBLIC_API_URL",
-    "NEXT_PUBLIC_WS_URL"
+    "ARTIFACT_ROOT",
+    "ARTIFACT_SIGNING_SECRET",
+    "FLY_MACHINE_ID",
+    "npm_package_version"
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ]
     },
-    "dev": { "cache": false, "persistent": true },
-    "lint": { "dependsOn": ["^build"] },
-    "typecheck": { "dependsOn": ["^build"] },
-    "test": { "dependsOn": ["^build"] },
-    "test:unit": { "dependsOn": ["^build"] },
-    "clean": { "cache": false }
+    "dev": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "test:unit": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "clean": {
+      "cache": false
+    }
   }
 }

@@ -6,7 +6,7 @@ export interface ResultRow {
   field: string;
   value: string;
   unit: string;
-  confidence: number;
+  confidence: number | null;
   status: string;
   /** Empty when the value stands on its own; a sentence when it needs a caveat. */
   note: string;
@@ -25,7 +25,7 @@ export interface ProvenanceRow {
   extractedAt: string;
   extractedBy: string;
   promptVersion: string;
-  confidence: number;
+  confidence: number | null;
   verificationStatus: string;
   independentReading: string;
   screenshot: string;
@@ -89,6 +89,7 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
   let verified = 0;
   let humanCorrected = 0;
   let confidenceSum = 0;
+  let confidenceCount = 0;
 
   const flagged = new Set(input.critiques.flatMap((critique) => critique.claimIds));
 
@@ -109,7 +110,10 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
 
     if (claim.status === 'VERIFIED') verified += 1;
     if (claim.status === 'HUMAN_CORRECTED') humanCorrected += 1;
-    confidenceSum += claim.confidence;
+    if (claim.confidence !== null) {
+      confidenceSum += claim.confidence;
+      confidenceCount += 1;
+    }
 
     const value = renderValue(claim.value);
     const critiqueNote = flagged.has(claim.id)
@@ -121,7 +125,7 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
       field: claim.field,
       value: claim.value === null ? (claim.nullReason ?? 'not present') : value,
       unit: claim.unit ?? '',
-      confidence: Number(claim.confidence.toFixed(3)),
+      confidence: claim.confidence === null ? null : Number(claim.confidence.toFixed(3)),
       status: claim.status,
       note: [NOTE_FOR[disposition], critiqueNote].filter(Boolean).join(' '),
     });
@@ -136,7 +140,7 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
       extractedAt: claim.extractedAt.toISOString(),
       extractedBy: claim.extractedBy,
       promptVersion: claim.promptVersion,
-      confidence: Number(claim.confidence.toFixed(3)),
+      confidence: claim.confidence === null ? null : Number(claim.confidence.toFixed(3)),
       verificationStatus: latest?.verdict ?? 'not sampled',
       independentReading: latest ? renderValue(latest.independentReading) : '',
       screenshot: claim.screenshotKey ? `${input.artifactBaseUrl}/${claim.screenshotKey}` : '',
@@ -157,7 +161,7 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
       excluded,
       verified,
       humanCorrected,
-      meanConfidence: exported === 0 ? 0 : Number((confidenceSum / exported).toFixed(3)),
+      meanConfidence: confidenceCount === 0 ? 0 : Number((confidenceSum / confidenceCount).toFixed(3)),
       blockingCritiques: input.critiques.filter((critique) => critique.severity === 'BLOCKING')
         .length,
     },

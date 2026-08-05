@@ -25,7 +25,10 @@ export function useRunStream(runId: string, accessToken: string | null): void {
   const closed = useRef(false);
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken) {
+      useRunStore.getState().setConnectionState('auth_failed', null, 'No active session');
+      return;
+    }
     closed.current = false;
 
     const flush = (): void => {
@@ -42,17 +45,42 @@ export function useRunStream(runId: string, accessToken: string | null): void {
     };
 
     let backoff = 500;
+    
+    const pollRest = async (): Promise<void> => {
+      if (closed.current) return;
+      const cursor = useRunStore.getState().lastSeq;
+      try {
+        const url = `${clientEnv.apiUrl}/v1/runs/${runId}/events?after=${cursor}&limit=500`;
+        const res = await fetch(url, {
+          headers: { authorization: `Bearer ${accessToken}` },
+        });
+        if (res.ok) {
+          useRunStore.getState().setFallbackMode(true);
+          const data = (await res.json()) as { events: StreamEvent[] };
+          if (data.events.length > 0) {
+            useRunStore.getState().applyBatch(data.events);
+          }
+        } else if (res.status === 401 || res.status === 403) {
+          useRunStore.getState().setConnectionState('auth_failed', res.status, 'Session expired');
+        }
+      } catch (_err) {
+        // If the REST endpoint fails, log it locally but keep trying.
+        console.warn('Failed to poll events; retrying in 2s');
+      }
+    };
 
     const connect = (): void => {
       if (closed.current) return;
       const cursor = useRunStore.getState().lastSeq;
       const url = `${clientEnv.wsUrl}?runId=${encodeURIComponent(runId)}&cursor=${String(cursor)}&token=${encodeURIComponent(accessToken)}`;
+      useRunStore.getState().setConnectionState('connecting');
       const ws = new WebSocket(url);
       socket.current = ws;
 
       ws.onopen = () => {
         backoff = 500;
-        useRunStore.getState().setConnected(true);
+        useRunStore.getState().setFallbackMode(false);
+        useRunStore.getState().setConnectionState('connected');
       };
 
       ws.onmessage = (message: MessageEvent<string>) => {
@@ -72,9 +100,18 @@ export function useRunStream(runId: string, accessToken: string | null): void {
         schedule();
       };
 
-      ws.onclose = () => {
-        useRunStore.getState().setConnected(false);
+      ws.onclose = (event: CloseEvent) => {
         if (closed.current) return;
+        
+        if (event.code === 4401 || event.code === 4404 || event.code === 4400) {
+          useRunStore.getState().setConnectionState('auth_failed', event.code, event.reason);
+          return;
+        }
+
+        useRunStore.getState().setConnectionState('disconnected', event.code, event.reason);
+        
+        void pollRest();
+        
         backoff = Math.min(backoff * 2, 10_000);
         window.setTimeout(connect, backoff);
       };

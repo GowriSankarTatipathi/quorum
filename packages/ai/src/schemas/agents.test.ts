@@ -142,23 +142,58 @@ describe('VerdictOutputSchema', () => {
       }).success,
     ).toBe(true);
   });
+
+  it('accepts an independent reading that is an array', () => {
+    expect(
+      VerdictOutputSchema.safeParse({
+        independentReading: ['Tier 1', 'Tier 2'],
+        verdict: 'CONTRADICTED',
+        rationale: 'There are actually two tiers.',
+        confidence: 0.95,
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe('CritiqueOutputSchema', () => {
-  it('requires every critique to cite the claims it concerns', () => {
+  it('accepts a critique with an empty claimIds array for COVERAGE_GAP', () => {
+    expect(
+      CritiqueOutputSchema.safeParse({
+        critiques: [
+          {
+            kind: 'COVERAGE_GAP',
+            severity: 'BLOCKING',
+            message: 'A tier is missing.',
+            claimIds: [],
+            remedy: { action: 're_extract', params: null },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts heterogeneous remedy params including booleans and arrays', () => {
     expect(
       CritiqueOutputSchema.safeParse({
         critiques: [
           {
             kind: 'UNIT_MISMATCH',
             severity: 'BLOCKING',
-            message: 'Expensify is quoted on an annual basis.',
-            claimIds: [],
-            remedy: { action: 're_extract', params: null },
+            message: 'Wrong unit',
+            claimIds: ['clm_1'],
+            remedy: { 
+              action: 're_extract', 
+              params: { 
+                entity: 'Expensify', 
+                drop_ids: ['clm_2', 'clm_3'], 
+                keep_one: true, 
+                threshold: 10 
+              } 
+            },
           },
         ],
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('accepts zero findings, which is a correct result on clean data', () => {

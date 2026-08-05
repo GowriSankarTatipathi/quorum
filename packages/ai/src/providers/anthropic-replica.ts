@@ -22,7 +22,7 @@ export type ReplicaResponse =
   | {
       kind: 'error';
       status: number;
-      errorType: string;
+      errorType?: string;
       message: string;
       retryAfterSeconds?: number;
     };
@@ -80,7 +80,7 @@ export function startAnthropicReplica(script: ReplicaScript, port = 0): Promise<
             id: 'msg_replica',
             type: 'message',
             role: 'assistant',
-            model: (requests.at(-1)?.body.model as string) ?? 'claude-sonnet-4-5',
+            model: (requests.at(-1)?.body.model as string) ?? 'claude-sonnet-4-5-20250929',
             content: [{ type: 'text', text: next.text }],
             stop_reason: 'end_turn',
             usage: {

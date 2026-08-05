@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SignJWT, type JWTPayload } from 'jose';
 import { AuthError } from './errors.js';
 import {
   generateRefreshToken,
@@ -75,6 +76,58 @@ describe('access tokens', () => {
 
   it('rejects a malformed token without throwing a raw parse error', async () => {
     await expect(verifyAccessToken('not.a.token', SECRET)).rejects.toBeInstanceOf(AuthError);
+  });
+
+  describe('schema validation', () => {
+    const mint = async (payload: JWTPayload) =>
+      new SignJWT(payload)
+        .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+        .sign(new TextEncoder().encode(SECRET));
+
+    const validPayload = {
+      sub: 'usr_1',
+      org: 'org_1',
+      email: 'maya@example.com',
+      role: 'MEMBER',
+      apa: 'INHERIT',
+      mtl: null,
+      otl: 4,
+      tv: 1,
+      jti: 'jti_1',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 900,
+      iss: 'quorum',
+      aud: 'quorum:api',
+    };
+
+    it('rejects a token missing org', async () => {
+      const { org: _org, ...rest } = validPayload;
+      const token = await mint(rest);
+      await expect(verifyAccessToken(token, SECRET)).rejects.toMatchObject({
+        code: 'E_TOKEN_MALFORMED',
+      });
+    });
+
+    it('rejects a token missing sub', async () => {
+      const { sub: _sub, ...rest } = validPayload;
+      const token = await mint(rest);
+      await expect(verifyAccessToken(token, SECRET)).rejects.toMatchObject({
+        code: 'E_TOKEN_MALFORMED',
+      });
+    });
+
+    it('rejects a token with a wrong-typed claim', async () => {
+      const token = await mint({ ...validPayload, tv: 'not-a-number' });
+      await expect(verifyAccessToken(token, SECRET)).rejects.toMatchObject({
+        code: 'E_TOKEN_MALFORMED',
+      });
+    });
+
+    it('a well-formed token still verifies', async () => {
+      const token = await mint(validPayload);
+      const claims = await verifyAccessToken(token, SECRET);
+      expect(claims.org).toBe('org_1');
+    });
   });
 });
 

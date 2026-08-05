@@ -23,3 +23,6 @@ prisma/*.db
 prisma/*.db-journal
 playwright-report/
 test-results/
+
+.artifacts/
+**/.artifacts/

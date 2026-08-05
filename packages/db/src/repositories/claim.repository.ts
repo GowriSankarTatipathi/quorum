@@ -1,11 +1,13 @@
 import type { ClaimStatus } from '@quorum/core';
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import type { ClaimRecord, CreateClaimInput, CreateVerdictInput, VerdictRecord } from '../types.js';
 import { toClaim, toVerdict } from './runtime-mappers.js';
 
 /** Confidence is DECIMAL(4,3); clamping here keeps a model that returns 1.4 from
  *  overflowing the column and taking down the extraction that produced it. */
-const confidenceString = (value: number): string => Math.min(1, Math.max(0, value)).toFixed(3);
+const confidenceString = (value: number | null): string | null =>
+  value === null ? null : Math.min(1, Math.max(0, value)).toFixed(3);
 
 export const claimRepository = {
   async create(input: CreateClaimInput): Promise<ClaimRecord> {
@@ -14,7 +16,7 @@ export const claimRepository = {
         stepId: input.stepId,
         entity: input.entity,
         field: input.field,
-        value: input.value ?? null,
+        value: (input.value ?? null) as Prisma.InputJsonValue,
         unit: input.unit ?? null,
         sourceUrl: input.sourceUrl,
         sourceSelector: input.sourceSelector ?? null,
@@ -39,7 +41,7 @@ export const claimRepository = {
             stepId: input.stepId,
             entity: input.entity,
             field: input.field,
-            value: input.value ?? null,
+            value: (input.value ?? null) as Prisma.InputJsonValue,
             unit: input.unit ?? null,
             sourceUrl: input.sourceUrl,
             sourceSelector: input.sourceSelector ?? null,
@@ -112,7 +114,7 @@ export const claimRepository = {
           stepId: replacement.stepId,
           entity: replacement.entity,
           field: replacement.field,
-          value: replacement.value ?? null,
+          value: (replacement.value ?? null) as Prisma.InputJsonValue, // Prisma strict InputJsonValue excludes unknown, but this payload is dynamic json
           unit: replacement.unit ?? null,
           sourceUrl: replacement.sourceUrl,
           sourceSelector: replacement.sourceSelector ?? null,
@@ -131,7 +133,7 @@ export const claimRepository = {
       }),
       prisma.claim.update({ where: { id: originalId }, data: { status: 'SUPERSEDED' } }),
     ]);
-    return toClaim(created as Record<string, unknown>);
+    return toClaim(created);
   },
 
   async setStatus(id: string, status: ClaimStatus): Promise<ClaimRecord> {
@@ -152,7 +154,7 @@ export const claimRepository = {
       }),
       prisma.claim.update({ where: { id: input.claimId }, data: { status: input.verdict } }),
     ]);
-    return toVerdict(verdict as Record<string, unknown>);
+    return toVerdict(verdict);
   },
 
   async listVerdicts(claimId: string): Promise<VerdictRecord[]> {

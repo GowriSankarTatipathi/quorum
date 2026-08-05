@@ -1,4 +1,5 @@
 import type { AgentId, RunStatus } from '@quorum/core';
+import { TRANSIENT_EVENTS } from '@quorum/events';
 import { create } from 'zustand';
 
 export interface StreamEvent {
@@ -36,6 +37,7 @@ export interface ClaimView {
   confidence: number;
   sourceUrl: string;
   status: 'UNVERIFIED' | 'VERIFIED' | 'CONTRADICTED' | 'SUPERSEDED';
+  independentReading?: boolean;
 }
 
 export interface CritiqueView {
@@ -95,6 +97,12 @@ export interface RunStore {
   highlight: { x: number; y: number; width: number; height: number } | null;
   pageUrl: string | null;
   liveViewUrl: string | null;
+  browserSessionState: 'not_started' | 'open' | 'closed';
+
+  connectionState: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'auth_failed';
+  disconnectCode: number | null;
+  disconnectReason: string | null;
+  fallbackMode: boolean;
 
   pendingApproval: PendingApproval | null;
   humanQuestion: string | null;
@@ -103,9 +111,13 @@ export interface RunStore {
   inputTokens: number;
   outputTokens: number;
   startedAt: string | null;
+  planHash: string | null;
+  goal: string | null;
 
   reset: (runId: string) => void;
   setConnected: (connected: boolean) => void;
+  setConnectionState: (state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'auth_failed', code?: number | null, reason?: string | null) => void;
+  setFallbackMode: (on: boolean) => void;
   setSummaryMode: (on: boolean) => void;
   applyEvent: (event: StreamEvent) => void;
   applyBatch: (events: StreamEvent[]) => void;
@@ -127,6 +139,10 @@ const initial = {
   runId: null,
   status: 'CREATED' as RunStatus,
   connected: false,
+  connectionState: 'idle' as const,
+  disconnectCode: null,
+  disconnectReason: null,
+  fallbackMode: false,
   summaryMode: false,
   lastSeq: 0,
   events: [] as StreamEvent[],
@@ -141,17 +157,27 @@ const initial = {
   highlight: null,
   pageUrl: null,
   liveViewUrl: null,
+  browserSessionState: 'not_started' as const,
   pendingApproval: null,
   humanQuestion: null,
   spentUsd: 0,
   inputTokens: 0,
   outputTokens: 0,
   startedAt: null,
+  planHash: null,
+  goal: null,
 };
 
 type Draft = Omit<
   RunStore,
-  'reset' | 'setConnected' | 'setSummaryMode' | 'applyEvent' | 'applyBatch' | 'hydrateSteps'
+  | 'reset'
+  | 'setConnected'
+  | 'setConnectionState'
+  | 'setFallbackMode'
+  | 'setSummaryMode'
+  | 'applyEvent'
+  | 'applyBatch'
+  | 'hydrateSteps'
 >;
 
 const payloadOf = <T>(event: StreamEvent): T => event.payload as T;
@@ -173,7 +199,7 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
       const p = payloadOf<{ goal: string }>(event);
       next.status = 'CREATED';
       next.startedAt = event.ts;
-      void p;
+      next.goal = p.goal;
       break;
     }
     case 'run.status.changed': {
@@ -190,7 +216,24 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
     case 'run.cancelled':
       next.status = 'CANCELLED';
       break;
+  }
 
+  // A terminal run status must clear any lane still marked as running, and mark
+  // the lane that failed as failed rather than pending.
+  if (
+    next.status !== draft.status &&
+    (next.status === 'COMPLETED' || next.status === 'FAILED' || next.status === 'CANCELLED')
+  ) {
+    const agents = { ...next.agents };
+    for (const [key, val] of Object.entries(agents)) {
+      if (val === 'running') {
+        agents[key as AgentId] = next.status === 'FAILED' ? 'failed' : 'idle';
+      }
+    }
+    next.agents = agents;
+  }
+
+  switch (event.type) {
     case 'plan.step.proposed': {
       const p = payloadOf<StepView & { estimatedMs: number | null; estimatedUsd: number | null }>(
         event,
@@ -208,6 +251,12 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
         status: 'PENDING',
       });
       next.steps = steps;
+      break;
+    }
+
+    case 'plan.completed': {
+      const p = payloadOf<{ planHash: string }>(event);
+      next.planHash = p.planHash;
       break;
     }
 
@@ -280,6 +329,7 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
 
     case 'browser.session.opened': {
       const p = payloadOf<{ liveViewUrl: string | null }>(event);
+      next.browserSessionState = 'open';
       next.liveViewUrl = p.liveViewUrl;
       break;
     }
@@ -322,6 +372,15 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
     case 'browser.screenshot': {
       const p = payloadOf<{ url: string }>(event);
       next.frame = { url: p.url, capturedAt: new Date(event.ts).getTime() };
+      break;
+    }
+    case 'browser.session.closed': {
+      const p = payloadOf<{ finalFrameUrl?: string }>(event);
+      next.browserSessionState = 'closed';
+      next.liveViewUrl = null;
+      if (p.finalFrameUrl) {
+        next.frame = { url: p.finalFrameUrl, capturedAt: new Date(event.ts).getTime() };
+      }
       break;
     }
 
@@ -403,6 +462,21 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
       break;
   }
 
+  // A terminal run status must clear any lane still marked as running, and mark
+  // the lane that failed as failed rather than pending.
+  if (
+    next.status !== draft.status &&
+    (next.status === 'COMPLETED' || next.status === 'FAILED' || next.status === 'CANCELLED')
+  ) {
+    const agents = { ...next.agents };
+    for (const [key, val] of Object.entries(agents)) {
+      if (val === 'running') {
+        agents[key as AgentId] = next.status === 'FAILED' ? 'failed' : 'idle';
+      }
+    }
+    next.agents = agents;
+  }
+
   return next;
 }
 
@@ -444,6 +518,12 @@ export const useRunStore = create<RunStore>((set) => ({
   setConnected: (connected) => {
     set({ connected });
   },
+  setConnectionState: (state, code = null, reason = null) => {
+    set({ connectionState: state, disconnectCode: code, disconnectReason: reason });
+  },
+  setFallbackMode: (on) => {
+    set({ fallbackMode: on });
+  },
   setSummaryMode: (summaryMode) => {
     set({ summaryMode });
   },
@@ -455,8 +535,13 @@ export const useRunStore = create<RunStore>((set) => ({
   applyBatch: (events) => {
     set((state) => {
       let next = state;
-      for (const event of events) next = { ...next, ...applyOne(next, event) };
-      return next;
+      const finalDiff: Partial<RunStore> = {};
+      for (const event of events) {
+        const diff = applyOne(next, event);
+        next = { ...next, ...diff };
+        Object.assign(finalDiff, diff);
+      }
+      return finalDiff;
     });
   },
 
@@ -472,11 +557,23 @@ function applyOne(state: RunStore, event: StreamEvent): Partial<RunStore> {
   const seenIds = new Set(state.seenIds);
   seenIds.add(event.id);
 
-  const events = [...state.events, event].slice(-MAX_EVENTS);
+  const events = (TRANSIENT_EVENTS as unknown as Set<string>).has(event.type)
+    ? state.events
+    : [...state.events, event].slice(-MAX_EVENTS);
+  
   const projected = reduceEvent(state, event);
 
+  const diff: Partial<RunStore> = {};
+  const proj = projected as unknown as RunStore;
+  for (const k of Object.keys(projected) as Array<keyof RunStore>) {
+    if (proj[k] !== state[k]) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+      diff[k] = proj[k] as any;
+    }
+  }
+
   return {
-    ...projected,
+    ...diff,
     events,
     seenIds,
     lastSeq: Math.max(state.lastSeq, event.seq),

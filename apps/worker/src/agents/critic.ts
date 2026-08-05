@@ -76,7 +76,7 @@ export async function runCriticAgent(ctx: CriticContext): Promise<CritiqueRecord
     // that does not exist is itself a hallucination, and storing it would put an
     // unactionable warning in front of the user.
     const citedIds = critique.claimIds.filter((id) => knownIds.has(id));
-    if (citedIds.length === 0) continue;
+    if (critique.claimIds.length > 0 && citedIds.length === 0) continue;
 
     const record = await critiqueRepository.create({
       runId: ctx.runId,

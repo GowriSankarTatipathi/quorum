@@ -51,8 +51,11 @@ export const runMachine = setup({
    * which the context and event types reach inference — removing it silently untypes
    * every guard and action below.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-  types: {} as { context: Blackboard; events: RunEvent; input: Blackboard },
+  types: {
+    context: {} as Blackboard,
+    events: {} as RunEvent,
+    input: {} as Blackboard,
+  },
   guards: {
     /**
      * Is there a step AFTER the current one?

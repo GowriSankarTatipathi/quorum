@@ -141,6 +141,16 @@ export class FixtureDriver implements BrowserDriver {
     );
   }
 
+  streamScreencast(_session: Session, onFrame: (buffer: Buffer) => void): Promise<() => Promise<void>> {
+    const timer = setInterval(() => {
+      onFrame(Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'));
+    }, 500);
+    return Promise.resolve(() => {
+      clearInterval(timer);
+      return Promise.resolve();
+    });
+  }
+
   async capture(session: Session): Promise<PageCapture> {
     const snapshot = await this.snapshot(session);
     const page = this.page(session.id);

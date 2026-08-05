@@ -1,3 +1,4 @@
+
 import { prisma } from '../client.js';
 import { microUsdToDecimalString } from '../money.js';
 import type { RecoveryAttemptRecord } from '../types.js';
@@ -56,25 +57,23 @@ export const recoveryRepository = {
   async successRateByClass(
     since: Date,
   ): Promise<{ errorClass: string; strategy: string; attempts: number; successes: number }[]> {
-    const rows: unknown[] = await prisma.recoveryAttempt.groupBy({
+    const rows = await prisma.recoveryAttempt.groupBy({
       by: ['errorClass', 'strategy'],
       where: { createdAt: { gte: since } },
       _count: { _all: true },
     });
-    const successes: unknown[] = await prisma.recoveryAttempt.groupBy({
+    const successes = await prisma.recoveryAttempt.groupBy({
       by: ['errorClass', 'strategy'],
       where: { createdAt: { gte: since }, succeeded: true },
       _count: { _all: true },
     });
 
     const successCount = new Map<string, number>();
-    for (const raw of successes) {
-      const r = raw as { errorClass: string; strategy: string; _count: { _all: number } };
+    for (const r of successes) {
       successCount.set(`${r.errorClass}::${r.strategy}`, Number(r._count._all));
     }
 
-    return rows.map((raw) => {
-      const r = raw as { errorClass: string; strategy: string; _count: { _all: number } };
+    return rows.map((r) => {
       return {
         errorClass: r.errorClass,
         strategy: r.strategy,

@@ -3,7 +3,7 @@ import { MemoryCacheStore, cacheKey, isCacheable } from './cache.js';
 import type { CompletionRequest } from './providers/types.js';
 
 const request = (over: Partial<CompletionRequest> = {}): CompletionRequest => ({
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-4-5-20250929',
   system: 'system prompt',
   user: 'user prompt',
   maxTokens: 1024,
@@ -21,7 +21,7 @@ describe('cacheKey', () => {
   it('differs when the prompt, model or agent differs', async () => {
     const base = await cacheKey('reasoning', request());
     expect(await cacheKey('reasoning', request({ user: 'other' }))).not.toBe(base);
-    expect(await cacheKey('reasoning', request({ model: 'claude-haiku-4-5' }))).not.toBe(base);
+    expect(await cacheKey('reasoning', request({ model: 'claude-haiku-4-5-20251001' }))).not.toBe(base);
     expect(await cacheKey('verification', request())).not.toBe(base);
   });
 

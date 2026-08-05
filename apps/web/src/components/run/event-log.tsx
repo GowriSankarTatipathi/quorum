@@ -58,7 +58,7 @@ export function EventLog() {
       >
         {events.map((event) => (
           <div key={event.id} className="flex gap-2 font-mono text-[11px] leading-relaxed">
-            <span className="shrink-0 tabular-nums text-fg-subtle">
+            <span suppressHydrationWarning className="shrink-0 tabular-nums text-fg-subtle">
               {formatEventTime(event.ts, startedAt)}
             </span>
             <span className={cn('shrink-0', TYPE_COLOUR(event.type))}>{event.type}</span>

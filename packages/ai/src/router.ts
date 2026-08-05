@@ -8,18 +8,57 @@ import type { CompletionRequest, ImageInput, LlmProvider } from './providers/typ
 import { noopTelemetry, type LlmTelemetrySink } from './telemetry.js';
 
 export interface RouterOptions {
-  providers: Partial<Record<'anthropic' | 'openai' | 'fixture', LlmProvider>>;
+  providers: Partial<Record<'anthropic' | 'fixture', LlmProvider>>;
   telemetry?: LlmTelemetrySink;
   cache?: CacheStore;
   cacheTtlSeconds?: number;
   /** Retries against the SAME model before switching providers. */
   retriesPerModel?: number;
   timeoutMs?: number;
-  /** Per-agent primary-model overrides from QUORUM_MODEL_<AGENT> env vars. */
-  modelOverrides?: Partial<Record<string, ModelId>>;
+  /** Pre-resolved candidate models for each agent. */
+  candidates: Record<LlmAgentId, ModelId[]>;
   /** Injectable so backoff is deterministic in tests. */
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+}
+
+export function resolveCandidateModels(
+  overrides: Partial<Record<string, ModelId>>,
+  providers: Partial<Record<'anthropic' | 'fixture', LlmProvider>>,
+  onWarning?: (model: ModelId, reason: string) => void,
+): Record<LlmAgentId, ModelId[]> {
+  const resolved = {} as Record<LlmAgentId, ModelId[]>;
+  const agents = Object.keys(MODEL_POLICY) as LlmAgentId[];
+
+  for (const agent of agents) {
+    const spec = MODEL_POLICY[agent];
+    const hasOverride = agent in overrides && overrides[agent] !== undefined;
+    const primary = overrides[agent] ?? spec.primary;
+    const fallback = hasOverride ? primary : spec.fallback;
+    const candidates = primary === fallback ? [primary] : [primary, fallback];
+
+    const available: ModelId[] = [];
+    for (const model of candidates) {
+      if (!providers.fixture && !providers[providerOf(model)]) {
+        onWarning?.(
+          model,
+          `No provider configured for ${providerOf(model)}; set the corresponding API key`,
+        );
+        continue;
+      }
+      available.push(model);
+    }
+
+    if (available.length === 0) {
+      throw new Error(
+        `No models available for agent '${agent}'. Please set QUORUM_MODEL_${agent.toUpperCase()} to an available model or configure API keys for the default models.`,
+      );
+    }
+
+    resolved[agent] = [...new Set(available)];
+  }
+
+  return resolved;
 }
 
 export interface AgentCallInput {
@@ -78,6 +117,10 @@ export class LlmRouter {
     this.random = options.random ?? Math.random;
   }
 
+  public get candidates(): Record<LlmAgentId, ModelId[]> {
+    return this.options.candidates;
+  }
+
   private providerFor(model: ModelId): LlmProvider {
     const fixture = this.options.providers.fixture;
     // A fixture provider, when present, serves every model: that is the whole point of
@@ -108,7 +151,7 @@ export class LlmRouter {
     schema: S,
   ): Promise<AgentCallResult<ZodOutput<S>>> {
     const spec = MODEL_POLICY[input.agent];
-    const primary = this.options.modelOverrides?.[input.agent] ?? spec.primary;
+    const primary = this.options.candidates[input.agent][0]!;
     const request: CompletionRequest = {
       model: primary,
       system: input.system,
@@ -151,10 +194,7 @@ export class LlmRouter {
     }
 
     const failures: { model: ModelId; errorClass: LlmErrorClass; message: string }[] = [];
-    const hasOverride = input.agent in (this.options.modelOverrides ?? {})
-      && this.options.modelOverrides![input.agent] !== undefined;
-    const fallback = hasOverride ? primary : spec.fallback;
-    const models: ModelId[] = primary === fallback ? [primary] : [primary, fallback];
+    const models = this.options.candidates[input.agent];
 
     for (const [index, model] of models.entries()) {
       const isFallback = index > 0;

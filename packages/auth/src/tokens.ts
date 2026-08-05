@@ -1,6 +1,7 @@
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
-import { newId } from '@quorum/core';
-import { AuthError, tokenExpired } from './errors.js';
+import { z } from 'zod';
+import { newId, ROLES, APPROVAL_AUTHORITIES } from '@quorum/core';
+import { AuthError, tokenExpired, tokenMalformed } from './errors.js';
 import { TOKEN_AUDIENCE, TOKEN_ISSUER, type AccessTokenClaims, type SessionUser } from './types.js';
 
 /**
@@ -68,8 +69,14 @@ export async function verifyAccessToken(token: string, secret: string): Promise<
       algorithms: [ALGORITHM],
       clockTolerance: 5,
     });
-    return payload as unknown as AccessTokenClaims;
+
+    const parsed = AccessTokenClaimsSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw tokenMalformed();
+    }
+    return parsed.data;
   } catch (error) {
+    if (error instanceof AuthError) throw error;
     if (error instanceof joseErrors.JWTExpired) throw tokenExpired();
     if (error instanceof joseErrors.JWTClaimValidationFailed)
       throw new AuthError(
@@ -131,3 +138,18 @@ export function timingSafeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+export const AccessTokenClaimsSchema = z.object({
+  sub: z.string(),
+  org: z.string(),
+  email: z.string(),
+  role: z.enum(ROLES),
+  apa: z.enum(APPROVAL_AUTHORITIES),
+  mtl: z.number().nullable(),
+  otl: z.number(),
+  tv: z.number(),
+  jti: z.string(),
+  iat: z.number(),
+  exp: z.number(),
+  iss: z.string(),
+  aud: z.string(),
+}) satisfies z.ZodType<AccessTokenClaims>;

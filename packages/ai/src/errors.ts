@@ -128,6 +128,19 @@ export function classifyVendorErrorType(type: string | undefined): LlmErrorClass
   }
 }
 
+export function classifyErrorText(text: string): LlmErrorClass | null {
+  if (
+    /ResourceExhausted/i.test(text) ||
+    /Worker local total request limit reached/i.test(text) ||
+    /rate limit/i.test(text) ||
+    /capacity/i.test(text) ||
+    /too many requests/i.test(text)
+  ) {
+    return 'RATE_LIMITED';
+  }
+  return null;
+}
+
 /**
  * HTTP status is the fallback signal when no vendor type is available: 429 means back off,
  * 401 means stop entirely, and retrying an auth failure three times just delays the

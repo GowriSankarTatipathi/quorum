@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import assert from 'node:assert';
 import { PlaywrightDriver, executeAction } from '@quorum/browser';
 import {
   LlmRouter,
@@ -12,6 +13,7 @@ import {
   createProviders,
   describeLlmConfig,
   loadLlmConfig,
+  resolveCandidateModels,
   type LlmCallTelemetry,
   type LlmTelemetrySink,
 } from '@quorum/ai';
@@ -58,14 +60,27 @@ const telemetry: LlmTelemetrySink = {
   recordCacheHit: () => undefined,
 };
 
+const providers = createProviders(config, { recordings: RECORDED_COMPLETIONS });
+const candidates = resolveCandidateModels(config.modelOverrides, providers, (model, reason) =>
+  console.log(`      ! model unavailable: ${model} (${reason})`)
+);
+
 const router = new LlmRouter({
-  providers: createProviders(config, { recordings: RECORDED_COMPLETIONS }),
+  providers,
   telemetry,
   cache: new MemoryCacheStore(),
   timeoutMs: config.timeoutMs,
   retriesPerModel: config.retriesPerModel,
-  modelOverrides: config.modelOverrides,
+  candidates,
 });
+
+import { createRouter as createWorkerRouter } from '../../worker/src/services/llm.js';
+const workerRouter = createWorkerRouter(telemetry);
+assert.deepStrictEqual(
+  workerRouter.candidates,
+  router.candidates,
+  'Integration harness and worker must resolve identical LLM candidates'
+);
 
 // ── Infrastructure ──────────────────────────────────────────────────────────
 step(1, 'Infrastructure');
@@ -343,7 +358,7 @@ for (const claim of extraction.data.claims) {
       shotKey,
       extraction.model,
       PROMPT_REGISTRY.reasoning.version,
-      claim.confidence.toFixed(3),
+      claim.confidence === null ? null : claim.confidence.toFixed(3),
       claim.nullReason,
     ],
   );
@@ -411,7 +426,7 @@ for (const claim of toVerify) {
       status,
       JSON.stringify(verdict.data.independentReading),
       verdict.data.rationale,
-      verdict.data.confidence.toFixed(3),
+      verdict.data.confidence === null ? null : verdict.data.confidence.toFixed(3),
       verdict.model,
     ],
   );
@@ -464,7 +479,7 @@ const knownIds = new Set(stored.map((c) => c.id));
 const critiques: CritiqueRecord[] = [];
 for (const c of critique.data.critiques) {
   const cited = c.claimIds.filter((id) => knownIds.has(id));
-  const ids = cited.length > 0 ? cited : stored.slice(0, 1).map((s) => s.id);
+  const ids = c.claimIds.length === 0 ? [] : (cited.length > 0 ? cited : stored.slice(0, 1).map((s) => s.id));
   const cid = `crt_${randomUUID().slice(0, 8)}`;
   await db.query(
     `INSERT INTO "Critique"(id,"runId",kind,severity,message,"claimIds",remedy) VALUES ($1,$2,$3,$4,$5,$6,$7)`,

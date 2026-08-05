@@ -21,7 +21,7 @@ function stubDriver() {
       closed.push(id);
       return Promise.resolve();
     },
-  } as unknown as BrowserDriver;
+  } as BrowserDriver;
   return { driver, closed };
 }
 

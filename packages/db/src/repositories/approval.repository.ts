@@ -1,3 +1,4 @@
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import type { ApprovalRecord, ApprovalScope, CreateApprovalInput } from '../types.js';
 import { toApproval } from './runtime-mappers.js';
@@ -8,8 +9,8 @@ export const approvalRepository = {
       data: {
         stepId: input.stepId,
         trustLevel: input.trustLevel,
-        action: input.action,
-        payload: input.payload ?? undefined,
+        action: input.action as Prisma.InputJsonValue, // Prisma requires InputJsonValue for json fields
+        payload: (input.payload ?? undefined) as Prisma.InputJsonValue | undefined, // Prisma requires InputJsonValue for json fields
         screenshotKey: input.screenshotKey ?? null,
         reason: input.reason,
       },
@@ -40,7 +41,7 @@ export const approvalRepository = {
         data: {
           status: decision,
           userId,
-          editedPayload: editedPayload ?? undefined,
+          editedPayload: (editedPayload ?? undefined) as Prisma.InputJsonValue | undefined, // Prisma requires InputJsonValue for json fields
           scope,
           decidedAt: new Date(),
         },
@@ -93,14 +94,13 @@ export const approvalRepository = {
   },
 
   async countByStatusForRun(runId: string): Promise<Record<string, number>> {
-    const rows: unknown[] = await prisma.approval.groupBy({
+    const rows = await prisma.approval.groupBy({
       by: ['status'],
       where: { step: { runId } },
       _count: { _all: true },
     });
     const counts: Record<string, number> = {};
-    for (const raw of rows) {
-      const r = raw as { status: string; _count: { _all: number } };
+    for (const r of rows) {
       counts[r.status] = Number(r._count._all);
     }
     return counts;

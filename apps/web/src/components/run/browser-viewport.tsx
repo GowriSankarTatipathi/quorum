@@ -2,6 +2,8 @@
 
 import { Button, cn } from '@quorum/ui';
 import { Globe, Hand, Monitor } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
 import { useRunStore } from '@/stores/run-store';
 import { EmptyState } from './empty-state';
 
@@ -18,7 +20,9 @@ export function BrowserViewport({ onTakeover }: { onTakeover?: () => void }) {
   const highlight = useRunStore((state) => state.highlight);
   const pageUrl = useRunStore((state) => state.pageUrl);
   const liveViewUrl = useRunStore((state) => state.liveViewUrl);
-  const connected = useRunStore((state) => state.connected);
+  const browserSessionState = useRunStore((state) => state.browserSessionState);
+  const connectionState = useRunStore((state) => state.connectionState);
+  const disconnectCode = useRunStore((state) => state.disconnectCode);
   const humanQuestion = useRunStore((state) => state.humanQuestion);
 
   const takeover = humanQuestion !== null;
@@ -41,10 +45,27 @@ export function BrowserViewport({ onTakeover }: { onTakeover?: () => void }) {
             aria-hidden
             className={cn(
               'size-1.5 rounded-full',
-              connected ? 'bg-[var(--color-verified)]' : 'bg-[var(--color-failed)]',
+              connectionState === 'connected' && 'bg-[var(--color-verified)]',
+              connectionState === 'connecting' && 'bg-[var(--color-review)]',
+              (connectionState === 'disconnected' || connectionState === 'auth_failed') && 'bg-[var(--color-failed)]',
+              connectionState === 'idle' && 'bg-fg-muted',
             )}
           />
-          {connected ? 'live' : 'reconnecting'}
+          {connectionState === 'auth_failed' ? (
+            <span className="text-failed">
+              session expired (<Link href="/api/auth/signin" className="underline">sign in</Link>)
+            </span>
+          ) : connectionState === 'disconnected' ? (
+            <span className="text-failed">
+              disconnected {disconnectCode ? `(${disconnectCode})` : ''}
+            </span>
+          ) : connectionState === 'connected' ? (
+            'live'
+          ) : connectionState === 'connecting' ? (
+            'connecting…'
+          ) : (
+            'idle'
+          )}
         </span>
       </header>
 
@@ -70,16 +91,30 @@ export function BrowserViewport({ onTakeover }: { onTakeover?: () => void }) {
             className="size-full border-0"
             sandbox="allow-scripts allow-same-origin"
           />
+        ) : browserSessionState === 'open' && !frame ? (
+          <div className="flex size-full items-center justify-center">
+            <div className="size-4 animate-spin rounded-full border-2 border-fg-subtle border-t-transparent" />
+          </div>
         ) : frame ? (
           <div className="relative size-full">
-            {/* eslint-disable-next-line @next/next/no-img-element -- screenshot frames are
-                streamed blobs from the run, not static assets Next can optimise. */}
-            <img
+            <Image
               src={frame.url}
               alt="Current page"
-              className="size-full object-contain transition-opacity duration-150"
+              fill
+              unoptimized
+              className={cn(
+                'object-contain transition-opacity duration-150',
+                browserSessionState === 'closed' && 'opacity-50 grayscale',
+              )}
             />
-            {highlight && (
+            {browserSessionState === 'closed' && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="rounded bg-canvas/80 px-2 py-1 text-xs font-medium text-fg-subtle backdrop-blur">
+                  Session ended
+                </span>
+              </div>
+            )}
+            {highlight && browserSessionState === 'open' && (
               // Drawn before the click, not after: predicting intent is the precondition
               // for trusting an agent, and it is what makes the pause key useful.
               <svg

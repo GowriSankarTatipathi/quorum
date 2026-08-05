@@ -1,3 +1,4 @@
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import type { CreateCritiqueInput, CritiqueRecord, CritiqueResolution } from '../types.js';
 import { toCritique } from './runtime-mappers.js';
@@ -11,7 +12,7 @@ export const critiqueRepository = {
         severity: input.severity,
         message: input.message,
         claimIds: input.claimIds,
-        remedy: input.remedy,
+        remedy: input.remedy as Prisma.InputJsonValue, // Prisma requires InputJsonValue instead of unknown for json fields
       },
     });
     return toCritique(row);
@@ -28,7 +29,7 @@ export const critiqueRepository = {
             severity: input.severity,
             message: input.message,
             claimIds: input.claimIds,
-            remedy: input.remedy,
+            remedy: input.remedy as Prisma.InputJsonValue, // Prisma requires InputJsonValue instead of unknown for json fields
           },
         }),
       ),

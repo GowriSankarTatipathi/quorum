@@ -1,6 +1,5 @@
 export * from './types.js';
 export { AnthropicProvider } from './anthropic.js';
-export { OpenAiProvider } from './openai.js';
 export { FixtureProvider, type RecordedCompletion } from './fixture.js';
 export {
   createProviders,

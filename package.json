@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "dotenv -e .env.local -- turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "prettier-plugin-prisma": "^5.0.0",

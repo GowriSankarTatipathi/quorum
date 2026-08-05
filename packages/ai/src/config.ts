@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { MODEL_IDS, type ModelId } from './models.js';
 
 /**
@@ -28,8 +30,6 @@ const optionalSecret = z
 const LlmEnvSchema = z.object({
   ANTHROPIC_API_KEY: optionalSecret,
   ANTHROPIC_BASE_URL: z.string().url().default('https://api.anthropic.com'),
-  OPENAI_API_KEY: optionalSecret,
-  OPENAI_BASE_URL: z.string().url().default('https://api.openai.com'),
 
   /** Per-agent model overrides, so a deployment can retune without a code change. */
   QUORUM_MODEL_PLANNER: z.enum(MODEL_IDS).optional(),
@@ -56,13 +56,14 @@ export type LlmEnv = z.infer<typeof LlmEnvSchema>;
 export interface LlmConfig {
   mode: 'live' | 'recorded';
   anthropic: { apiKey: string; baseUrl: string } | null;
-  openai: { apiKey: string; baseUrl: string } | null;
   modelOverrides: Partial<Record<string, ModelId>>;
   timeoutMs: number;
   cacheTtlSeconds: number;
   retriesPerModel: number;
   /** Explains, in one sentence, why the mode is what it is. Logged at boot. */
   reason: string;
+  /** Provenance of each resolved configuration value for transparent logging. */
+  provenance: string[];
 }
 
 export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfig {
@@ -75,11 +76,49 @@ export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfi
   }
   const env = parsed.data;
 
+  // Manual .env.local parse for provenance tracking.
+  const envLocalKeys = new Set<string>();
+  try {
+    const content = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const idx = trimmed.indexOf('=');
+      if (idx !== -1) {
+        envLocalKeys.add(trimmed.slice(0, idx).trim());
+      }
+    }
+  } catch {
+    // Ignore if not present or readable.
+  }
+
+  const getSource = (key: string, value: unknown) => {
+    if (value === undefined || value === null) return 'schema_default';
+    if (envLocalKeys.has(key)) return '.env.local';
+    if (source[key] !== undefined) return 'env_inherited';
+    return 'schema_default';
+  };
+
+  const provenance: string[] = [];
+  const track = (key: string, value: unknown, mask = false) => {
+    const src = getSource(key, value);
+    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const displayValue = (value === undefined || value === null) ? 'unset' : (mask ? maskKey(stringValue) : stringValue);
+    provenance.push(`${key}=${displayValue} (from ${src})`);
+  };
+
+  track('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY, true);
+  track('ANTHROPIC_BASE_URL', env.ANTHROPIC_BASE_URL);
+  track('QUORUM_MODEL_PLANNER', env.QUORUM_MODEL_PLANNER);
+  track('QUORUM_MODEL_BROWSER', env.QUORUM_MODEL_BROWSER);
+  track('QUORUM_MODEL_REASONING', env.QUORUM_MODEL_REASONING);
+  track('QUORUM_MODEL_VERIFICATION', env.QUORUM_MODEL_VERIFICATION);
+  track('QUORUM_MODEL_CRITIC', env.QUORUM_MODEL_CRITIC);
+  track('QUORUM_MODEL_RECOVERY', env.QUORUM_MODEL_RECOVERY);
+  track('QUORUM_MODEL_FORMATTER', env.QUORUM_MODEL_FORMATTER);
+
   const anthropic = env.ANTHROPIC_API_KEY
     ? { apiKey: env.ANTHROPIC_API_KEY, baseUrl: env.ANTHROPIC_BASE_URL }
-    : null;
-  const openai = env.OPENAI_API_KEY
-    ? { apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL }
     : null;
 
   let mode: 'live' | 'recorded';
@@ -89,32 +128,25 @@ export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfi
     mode = 'recorded';
     reason = 'QUORUM_LLM_MODE=recorded — using recorded responses regardless of any key.';
   } else if (env.QUORUM_LLM_MODE === 'live') {
-    if (!anthropic && !openai) {
+    if (!anthropic) {
       throw new Error(
-        'QUORUM_LLM_MODE=live but no provider key is set. Export ANTHROPIC_API_KEY (or OPENAI_API_KEY) and try again.',
+        'QUORUM_LLM_MODE=live but no provider key is set. Export ANTHROPIC_API_KEY and try again.',
       );
     }
     mode = 'live';
     reason = 'QUORUM_LLM_MODE=live — calling the vendor API.';
-  } else if (anthropic || openai) {
+  } else if (anthropic) {
     mode = 'live';
-    const providers = [anthropic ? 'Anthropic' : null, openai ? 'OpenAI' : null]
-      .filter(Boolean);
-    const primary = providers[0]!;
-    const fallbackNote = providers.length > 1
-      ? ` with ${providers[1]!} as fallback`
-      : ' (no fallback provider configured)';
-    reason = `${primary} key is set — calling the vendor API${fallbackNote}.`;
+    reason = 'Anthropic key is set — calling the vendor API.';
   } else {
     mode = 'recorded';
     reason =
-      'No provider key found — using recorded responses. Export ANTHROPIC_API_KEY or OPENAI_API_KEY to run against a real model.';
+      'No provider key found — using recorded responses. Export ANTHROPIC_API_KEY to run against a real model.';
   }
 
   return {
     mode,
     anthropic,
-    openai,
     modelOverrides: {
       planner: env.QUORUM_MODEL_PLANNER,
       browser: env.QUORUM_MODEL_BROWSER,
@@ -128,6 +160,7 @@ export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfi
     cacheTtlSeconds: env.LLM_CACHE_TTL_S,
     retriesPerModel: env.LLM_RETRIES_PER_MODEL,
     reason,
+    provenance,
   };
 }
 
@@ -135,7 +168,6 @@ export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfi
 export function describeLlmConfig(config: LlmConfig): string {
   const providers = [
     config.anthropic ? `anthropic(${maskKey(config.anthropic.apiKey)})` : null,
-    config.openai ? `openai(${maskKey(config.openai.apiKey)})` : null,
   ]
     .filter(Boolean)
     .join(', ');

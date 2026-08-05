@@ -3,7 +3,7 @@
 import { Button } from '@quorum/ui';
 import { Download, History, Loader2, Pause, Play, Square } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { elapsedSince, formatTokens, formatUsd } from '@/lib/format';
 import { useRunStream } from '@/hooks/use-run-stream';
 import { controlRun, getExportUrl, requestExport } from '@/server/runs/actions';
@@ -47,10 +47,15 @@ export function RunCanvas(props: RunCanvasProps) {
   const spentUsd = useRunStore((state) => state.spentUsd);
   const inputTokens = useRunStore((state) => state.inputTokens);
   const outputTokens = useRunStore((state) => state.outputTokens);
+  const fallbackMode = useRunStore((state) => state.fallbackMode);
+  const storePlanHash = useRunStore((state) => state.planHash);
+  const storeStartedAt = useRunStore((state) => state.startedAt);
+  const storeGoal = useRunStore((state) => state.goal);
+  const pendingApproval = useRunStore((state) => state.pendingApproval);
   const reset = useRunStore((state) => state.reset);
   const hydrateSteps = useRunStore((state) => state.hydrateSteps);
   const [pending, startTransition] = useTransition();
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -59,12 +64,12 @@ export function RunCanvas(props: RunCanvasProps) {
     hydrateSteps(props.initialSteps);
     // Intentionally run once per run id: the store is a projection of the stream, and
     // re-seeding it on every render would discard live state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.runId]);
+  }, [props.runId, props.initialSteps, reset, hydrateSteps]);
 
   useRunStream(props.runId, props.accessToken);
 
   useEffect(() => {
+    setNow(Date.now());
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 1_000);
@@ -75,7 +80,35 @@ export function RunCanvas(props: RunCanvasProps) {
 
   const status = storeStatus === 'CREATED' ? props.initialStatus : storeStatus;
   const planSteps = steps.size > 0 ? [...steps.values()] : props.initialSteps;
+  const planHash = storePlanHash ?? props.planHash;
+  const startedAt = storeStartedAt ?? props.startedAt;
+  const goal = storeGoal ?? props.goal;
   const running = ['EXECUTING', 'VERIFYING', 'RECOVERING', 'CRITIQUE'].includes(status);
+
+  const isAwaitingApproval = status === 'AWAITING_APPROVAL' || !!pendingApproval;
+
+  useEffect(() => {
+    if (isAwaitingApproval) {
+      const originalTitle = document.title;
+      document.title = `(Review needed) ${originalTitle}`;
+
+      if (document.visibilityState !== 'visible') {
+        if (Notification.permission === 'default') {
+          void Notification.requestPermission().then((permission) => {
+            if (permission === 'granted') {
+              new Notification('Approval required', { body: 'Your run is waiting for your approval.' });
+            }
+          });
+        } else if (Notification.permission === 'granted') {
+          new Notification('Approval required', { body: 'Your run is waiting for your approval.' });
+        }
+      }
+
+      return () => {
+        document.title = originalTitle;
+      };
+    }
+  }, [isAwaitingApproval]);
 
   /**
    * Request, then fetch the link. The workbook is built in the worker, so the button
@@ -104,11 +137,14 @@ export function RunCanvas(props: RunCanvasProps) {
     });
   };
 
-  const control = (action: 'pause' | 'resume' | 'stop') => {
-    startTransition(() => {
-      void controlRun(props.runId, action);
-    });
-  };
+  const control = useCallback(
+    (action: 'pause' | 'resume' | 'stop') => {
+      startTransition(() => {
+        void controlRun(props.runId, action);
+      });
+    },
+    [props.runId],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -133,22 +169,26 @@ export function RunCanvas(props: RunCanvasProps) {
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, status]);
+  }, [running, status, control]);
 
-  if (status === 'AWAITING_APPROVAL' && props.planHash) {
-    return <PlanReview runId={props.runId} planHash={props.planHash} steps={planSteps} />;
+  if (status === 'AWAITING_APPROVAL' && planHash) {
+    return <PlanReview runId={props.runId} planHash={planHash} steps={planSteps} />;
   }
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-5 py-2.5">
-        <p className="truncate text-sm" title={props.goal}>
-          {props.goal}
+        <p className="truncate text-sm" title={goal}>
+          {goal}
         </p>
         <p className="ml-auto flex items-center gap-3 font-mono text-[11px] tabular-nums text-fg-subtle">
+          {fallbackMode && (
+            <span className="rounded bg-[var(--color-review)]/10 px-1.5 py-0.5 text-[10px] text-review" title="Live stream unavailable; polling for events">
+              degraded mode
+            </span>
+          )}
           <span className="uppercase">{status.toLowerCase().replace('_', ' ')}</span>
-          <span>{elapsedSince(props.startedAt, now)}</span>
+          <span>{now === null ? '0:00' : elapsedSince(startedAt, now)}</span>
           <span>{formatTokens(inputTokens + outputTokens)} tok</span>
           <span>{formatUsd(spentUsd)}</span>
         </p>

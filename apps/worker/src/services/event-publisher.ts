@@ -4,6 +4,7 @@ import {
   SequenceCounter,
   createEvent,
   runChannel,
+  TRANSIENT_EVENTS,
   type EventContext,
   type RunEventPayloads,
   type RunEventType,
@@ -18,6 +19,8 @@ import { publisher } from '../redis.js';
  * costs live latency and never loses history: the database is the replay source of
  * truth and the bus is only transport. Publishing first would make the UI show events
  * that no audit trail contains, which is the wrong failure to have in this product.
+ *
+ * Transient events are published but not persisted.
  */
 export class EventPublisher {
   private readonly counter = new SequenceCounter();
@@ -34,17 +37,19 @@ export class EventPublisher {
   ): Promise<void> {
     const event = createEvent(type, payload, ctx, this.counter.next(ctx.runId));
 
-    await eventRepository.append({
-      id: event.id,
-      runId: event.runId,
-      seq: event.seq,
-      type: event.type,
-      agent: event.agent,
-      stepId: event.stepId,
-      payload: event.payload,
-      causationId: event.causationId,
-      correlationId: event.correlationId,
-    });
+    if (!TRANSIENT_EVENTS.has(type)) {
+      await eventRepository.append({
+        id: event.id,
+        runId: event.runId,
+        seq: event.seq,
+        type: event.type,
+        agent: event.agent,
+        stepId: event.stepId,
+        payload: event.payload,
+        causationId: event.causationId,
+        correlationId: event.correlationId,
+      });
+    }
 
     try {
       await publisher.publish(runChannel(event.runId), JSON.stringify(event));

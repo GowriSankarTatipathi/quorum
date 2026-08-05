@@ -1,4 +1,5 @@
 import type { AutonomyMode, RunStatus } from '@quorum/core';
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import { decimalToMicroUsd, microUsdToDecimalString } from '../money.js';
 import type { CreateRunInput, RunCostBreakdown, RunRecord, RunSnapshot } from '../types.js';
@@ -50,7 +51,7 @@ export const runRepository = {
       where: { id },
       select: { machineState: true, blackboard: true },
     });
-    return row ? toRunSnapshot(row as Record<string, unknown>) : null;
+    return row ? toRunSnapshot(row) : null;
   },
 
   /**
@@ -63,8 +64,8 @@ export const runRepository = {
       where: { id },
       data: {
         status,
-        machineState: snapshot.machineState ?? undefined,
-        blackboard: snapshot.blackboard ?? undefined,
+        machineState: (snapshot.machineState ?? undefined) as Prisma.InputJsonValue | undefined, // Prisma requires InputJsonValue for json fields
+        blackboard: (snapshot.blackboard ?? undefined) as Prisma.InputJsonValue | undefined, // Prisma requires InputJsonValue for json fields
       },
     });
   },
@@ -99,7 +100,7 @@ export const runRepository = {
     return toRun(
       await prisma.run.update({
         where: { id },
-        data: { status: 'FAILED', errorCode: code, errorDetail: detail, endedAt: new Date() },
+        data: { status: 'FAILED', errorCode: code, errorDetail: detail as Prisma.InputJsonValue, endedAt: new Date() }, // Prisma requires InputJsonValue for json fields
       }),
     );
   },
@@ -125,19 +126,14 @@ export const runRepository = {
 
   /** Powers both the usage page and the per-agent cost line items in the UI. */
   async costBreakdown(id: string): Promise<RunCostBreakdown> {
-    const rows: unknown[] = await prisma.llmCall.groupBy({
+    const rows = await prisma.llmCall.groupBy({
       by: ['agent'],
       where: { runId: id },
       _sum: { costUsd: true, inputTokens: true, outputTokens: true, cachedTokens: true },
       _count: { _all: true },
     });
 
-    const byAgent = rows.map((raw) => {
-      const r = raw as {
-        agent: string;
-        _sum: { costUsd: unknown };
-        _count: { _all: number };
-      };
+    const byAgent = rows.map((r) => {
       return {
         agent: r.agent,
         microUsd: decimalToMicroUsdSafe(r._sum.costUsd),

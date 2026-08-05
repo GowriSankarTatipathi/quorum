@@ -3,7 +3,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { Button, Kbd } from '@quorum/ui';
 import { Info, ShieldAlert } from 'lucide-react';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { decideApproval } from '@/server/runs/actions';
 import { useRunStore } from '@/stores/run-store';
 
@@ -42,7 +42,7 @@ export function ApprovalModal({ runId }: { runId: string }) {
     );
   }, [approval]);
 
-  const decide = (decision: 'APPROVED' | 'REJECTED') => {
+  const decide = useCallback((decision: 'APPROVED' | 'REJECTED') => {
     if (!approval) return;
     setError(null);
     startTransition(() => {
@@ -56,7 +56,7 @@ export function ApprovalModal({ runId }: { runId: string }) {
         if (!result.ok) setError(result.message);
       });
     });
-  };
+  }, [approval, runId, payload, scopeAll]);
 
   useEffect(() => {
     if (!approval) return;
@@ -68,8 +68,7 @@ export function ApprovalModal({ runId }: { runId: string }) {
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approval, payload, scopeAll]);
+  }, [approval, decide]);
 
   if (!approval) return null;
 

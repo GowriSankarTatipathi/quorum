@@ -8,8 +8,8 @@ import {
   buildCriticPrompt,
   type CriticAgentInput,
   type CriticClaimView,
-} from './critic.v3.js';
-import { PLANNER_PROMPT_VERSION, buildPlannerPrompt, type PlannerInput } from './planner.v3.js';
+} from './critic.v4.js';
+import { PLANNER_PROMPT_VERSION, buildPlannerPrompt, type PlannerInput } from './planner.v5.js';
 import {
   REASONING_PROMPT_VERSION,
   buildReasoningPrompt,

@@ -1,10 +1,9 @@
 import type { LlmConfig } from '../config.js';
 import { AnthropicProvider } from './anthropic.js';
 import { FixtureProvider, type RecordedCompletion } from './fixture.js';
-import { OpenAiProvider } from './openai.js';
 import type { LlmProvider } from './types.js';
 
-export type ProviderSet = Partial<Record<'anthropic' | 'openai' | 'fixture', LlmProvider>>;
+export type ProviderSet = Partial<Record<'anthropic' | 'fixture', LlmProvider>>;
 
 export interface CreateProvidersOptions {
   /** Supplied in recorded mode. Ignored entirely when running live. */
@@ -30,9 +29,6 @@ export function createProviders(
   const providers: ProviderSet = {};
   if (config.anthropic) {
     providers.anthropic = new AnthropicProvider(config.anthropic.apiKey, config.anthropic.baseUrl);
-  }
-  if (config.openai) {
-    providers.openai = new OpenAiProvider(config.openai.apiKey, config.openai.baseUrl);
   }
 
   if (Object.keys(providers).length === 0) {

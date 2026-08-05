@@ -1,32 +1,28 @@
-import { ArtifactStorage } from '@quorum/storage';
+import { join } from 'node:path';
+import { ArtifactStorage, FilesystemStorage, type ArtifactStore } from '@quorum/storage';
 import { env } from '../env.js';
 
-/**
- * Constructed lazily and only when credentials exist.
- *
- * A worker with no object store configured can still plan and browse — it simply cannot
- * export or persist screenshots. Failing at boot for a capability most runs do not reach
- * would turn a partial configuration into a total outage.
- */
-let instance: ArtifactStorage | null = null;
+let instance: ArtifactStore | null = null;
 
-export function getStorage(): ArtifactStorage {
+export function getStorage(): ArtifactStore {
   if (!instance) {
-    if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
-      throw new Error(
-        'Artifact storage is not configured. Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (or point R2_ENDPOINT at the local MinIO container).',
-      );
+    if (env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY) {
+      instance = new ArtifactStorage({
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+        bucket: env.R2_BUCKET,
+        ...(env.R2_ACCOUNT_ID ? { accountId: env.R2_ACCOUNT_ID } : {}),
+        ...(env.R2_ENDPOINT ? { endpoint: env.R2_ENDPOINT } : {}),
+      });
+    } else {
+      instance = new FilesystemStorage({
+        root: env.ARTIFACT_ROOT ?? join(process.cwd(), '../../.artifacts'),
+        publicBaseUrl: `${env.ARTIFACT_BASE_URL}/v1/artifacts`,
+        signingSecret: env.ARTIFACT_SIGNING_SECRET ?? 'development-secret-do-not-use-in-production',
+      });
     }
-    instance = new ArtifactStorage({
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-      bucket: env.R2_BUCKET,
-      ...(env.R2_ACCOUNT_ID ? { accountId: env.R2_ACCOUNT_ID } : {}),
-      ...(env.R2_ENDPOINT ? { endpoint: env.R2_ENDPOINT } : {}),
-    });
   }
   return instance;
 }
 
-export const hasStorage = (): boolean =>
-  Boolean(env.R2_ACCESS_KEY_ID) && Boolean(env.R2_SECRET_ACCESS_KEY);
+export const hasStorage = (): boolean => true;

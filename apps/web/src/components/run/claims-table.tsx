@@ -2,6 +2,7 @@
 
 import { cn } from '@quorum/ui';
 import { AlertTriangle, ExternalLink, Table2 } from 'lucide-react';
+import { claimDisposition } from '@quorum/core';
 import { useRunStore } from '@/stores/run-store';
 import { ConfidencePips } from './confidence-pips';
 import { EmptyState } from './empty-state';
@@ -11,6 +12,7 @@ const STATUS_STYLE: Record<string, string> = {
   UNVERIFIED: 'text-fg-subtle',
   CONTRADICTED: 'text-failed',
   SUPERSEDED: 'text-fg-subtle line-through',
+  QUARANTINED: 'text-failed font-medium',
 };
 
 /**
@@ -57,6 +59,9 @@ export function ClaimsTable() {
                   Value
                 </th>
                 <th scope="col" className="px-3 py-1.5 font-normal">
+                  Status
+                </th>
+                <th scope="col" className="px-3 py-1.5 font-normal">
                   Confidence
                 </th>
                 <th scope="col" className="px-3 py-1.5 font-normal">
@@ -65,45 +70,85 @@ export function ClaimsTable() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-hairline)]">
-              {rows.map((claim) => (
-                <tr key={claim.id} className="animate-[stream-in_150ms_cubic-bezier(0.2,0,0,1)]">
-                  <td className="px-3 py-1.5">{claim.entity}</td>
-                  <td className="px-3 py-1.5 font-mono text-[11px] text-fg-muted">{claim.field}</td>
-                  <td
-                    className={cn('px-3 py-1.5 font-mono tabular-nums', STATUS_STYLE[claim.status])}
-                  >
-                    {claim.value === null ? (
-                      <span className="italic text-fg-subtle">null</span>
-                    ) : (
-                      renderValue(claim.value)
-                    )}
-                    {claim.unit && (
-                      <span className="ml-1 text-[10px] text-fg-subtle">{claim.unit}</span>
-                    )}
-                    {flaggedIds.has(claim.id) && (
-                      <AlertTriangle
-                        className="ml-1.5 inline size-3 text-review"
-                        aria-label="Flagged by the Critic"
-                      />
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <ConfidencePips confidence={claim.confidence} />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    {/* Provenance is one click away from every value, always. */}
-                    <a
-                      href={claim.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="inline-flex items-center gap-1 font-mono text-[11px] text-fg-subtle hover:text-[var(--color-action)]"
+              {rows.map((claim) => {
+                // Determine disposition for the claim
+                const disposition = claimDisposition({
+                  confidence: claim.confidence,
+                  status: claim.status,
+                  // In the table, we assume grounded because ungrounded are not stored
+                  grounded: true,
+                  verdicts: claim.status === 'CONTRADICTED' ? [{ verdict: 'CONTRADICTED' as const }] : [],
+                });
+
+                const isQuarantined = disposition === 'QUARANTINE';
+
+                return (
+                  <tr key={claim.id} className="animate-[stream-in_150ms_cubic-bezier(0.2,0,0,1)]">
+                    <td className="px-3 py-1.5">{claim.entity}</td>
+                    <td className="px-3 py-1.5 font-mono text-[11px] text-fg-muted">{claim.field}</td>
+                    <td
+                      className={cn('px-3 py-1.5 font-mono tabular-nums', STATUS_STYLE[claim.status])}
                     >
-                      {new URL(claim.sourceUrl).hostname.replace(/^www\./, '')}
-                      <ExternalLink className="size-3" aria-hidden />
-                    </a>
-                  </td>
-                </tr>
-              ))}
+                      <div className={cn(isQuarantined && 'line-through opacity-50')}>
+                        {claim.value === null ? (
+                          <span className="italic text-fg-subtle">null</span>
+                        ) : (
+                          renderValue(claim.value)
+                        )}
+                        {claim.unit && (
+                          <span className="ml-1 text-[10px] text-fg-subtle">{claim.unit}</span>
+                        )}
+                      </div>
+                      {flaggedIds.has(claim.id) && (
+                        <AlertTriangle
+                          className="ml-1.5 inline size-3 text-review"
+                          aria-label="Flagged by the Critic"
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 font-mono text-[11px]">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={cn('uppercase', STATUS_STYLE[isQuarantined ? 'QUARANTINED' : claim.status] ?? 'text-fg-subtle')}>
+                          {isQuarantined ? 'QUARANTINED' : claim.status}
+                        </span>
+                        {disposition !== 'ACCEPT' && !isQuarantined && (
+                          <span className="text-[10px] text-fg-muted uppercase">
+                            {disposition.replace('_', ' ')}
+                          </span>
+                        )}
+                        {claim.status === 'CONTRADICTED' && claim.independentReading !== undefined && (
+                          <details className="mt-1 group">
+                            <summary className="cursor-pointer text-[10px] text-failed hover:underline outline-none">
+                              View reading
+                            </summary>
+                            <div className="mt-1 rounded bg-canvas/50 p-1.5 text-fg-muted">
+                              Verifier read:{' '}
+                              <span className="font-medium text-fg">
+                                {renderValue(claim.independentReading)}
+                              </span>
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <ConfidencePips confidence={claim.confidence} />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {/* Provenance is one click away from every value, always. */}
+                      <a
+                        href={claim.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="inline-flex items-center gap-1 font-mono text-[11px] text-fg-subtle hover:text-[var(--color-action)]"
+                      >
+                        {new URL(claim.sourceUrl).hostname.replace(/^www\./, '')}
+                        <ExternalLink className="size-3" aria-hidden />
+                      </a>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -1,6 +1,6 @@
 import { DOMAIN_PRIORS, IDENTITY, JSON_ONLY } from './shared/index.js';
 
-export const CRITIC_PROMPT_VERSION = 'critic.v3';
+export const CRITIC_PROMPT_VERSION = 'critic.v4';
 
 export interface CriticClaimView {
   id: string;
@@ -8,7 +8,7 @@ export interface CriticClaimView {
   field: string;
   value: unknown;
   unit: string | null;
-  confidence: number;
+  confidence: number | null;
   sourceUrl: string;
   status: string;
 }
@@ -52,9 +52,10 @@ are invisible when claims are examined one at a time.
 </check_for>
 
 <rules>
-- Every critique must cite the specific claim ids it concerns.
+- Every critique must cite the specific claim ids it concerns. For COVERAGE_GAP or issues concerning missing information, claimIds may be an empty array [].
 - Propose a concrete remedy: re_extract (and with what change), drop, merge, ask_human
   (with the exact question), or accept.
+- remedy.params is a heterogeneous map: use strings, booleans, numbers, or arrays as appropriate for the parameters.
 - Severity: BLOCKING means the result is wrong if unaddressed. WARNING means worth a look.
   NOTE is for the record.
 - Do not manufacture critiques. Zero findings on clean data is a correct and valuable
@@ -74,7 +75,14 @@ ${JSON_ONLY}
       "severity": "BLOCKING",
       "message": "what is wrong, in plain English, naming the entities involved",
       "claimIds": ["clm_1", "clm_2"],
-      "remedy": { "action": "re_extract", "params": { "entity": "Expensify", "period": "monthly" } }
+      "remedy": { "action": "re_extract", "params": { "entity": "Expensify", "period": "monthly", "drop_ids": ["clm_2"], "force": true } }
+    },
+    {
+      "kind": "COVERAGE_GAP",
+      "severity": "WARNING",
+      "message": "Expected 3 tiers, found 2. Missing 'Enterprise' tier.",
+      "claimIds": [],
+      "remedy": { "action": "re_extract", "params": { "missing_entity": "Enterprise" } }
     }
   ]
 }
