@@ -53,23 +53,25 @@ export async function buildWorkbook(bundle: ExportBundle, meta: WorkbookMeta): P
   styleHeader(results);
   results.getColumn('confidence').numFmt = '0.000';
 
-  // Anything below the flag threshold is tinted, so a reviewer's eye lands on the rows
-  // that actually need a second look rather than scanning all of them equally.
+  // Reserve visual emphasis for rows that genuinely need a human rather than
+  // scanning all of them equally or throwing vague warnings.
   results.eachRow((row, index) => {
     if (index === 1) return;
     const confidenceCell = row.getCell('confidence');
     if (confidenceCell.value === null) {
       confidenceCell.value = 'not reported';
       confidenceCell.numFmt = '';
-    } else {
-      const confidence = Number(confidenceCell.value);
-      if (confidence < 0.8) {
-        confidenceCell.fill = {
+    }
+
+    const resultData = bundle.results[index - 2];
+    if (resultData?.needsReview) {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FFFFF4CC' },
         };
-      }
+      });
     }
   });
 

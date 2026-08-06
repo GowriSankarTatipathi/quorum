@@ -14,6 +14,7 @@ import { ApprovalModal } from './approval-modal';
 import { BrowserViewport } from './browser-viewport';
 import { ClaimsTable } from './claims-table';
 import { EventLog } from './event-log';
+import { cn } from '@quorum/ui';
 import { PlanReview } from './plan-review';
 
 export interface RunCanvasProps {
@@ -84,6 +85,7 @@ export function RunCanvas(props: RunCanvasProps) {
   const startedAt = storeStartedAt ?? props.startedAt;
   const goal = storeGoal ?? props.goal;
   const running = ['EXECUTING', 'VERIFYING', 'RECOVERING', 'CRITIQUE'].includes(status);
+  const isTerminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status);
 
   const isAwaitingApproval = status === 'AWAITING_APPROVAL' || !!pendingApproval;
 
@@ -96,7 +98,9 @@ export function RunCanvas(props: RunCanvasProps) {
         if (Notification.permission === 'default') {
           void Notification.requestPermission().then((permission) => {
             if (permission === 'granted') {
-              new Notification('Approval required', { body: 'Your run is waiting for your approval.' });
+              new Notification('Approval required', {
+                body: 'Your run is waiting for your approval.',
+              });
             }
           });
         } else if (Notification.permission === 'granted') {
@@ -183,7 +187,10 @@ export function RunCanvas(props: RunCanvasProps) {
         </p>
         <p className="ml-auto flex items-center gap-3 font-mono text-[11px] tabular-nums text-fg-subtle">
           {fallbackMode && (
-            <span className="rounded bg-[var(--color-review)]/10 px-1.5 py-0.5 text-[10px] text-review" title="Live stream unavailable; polling for events">
+            <span
+              className="rounded bg-[var(--color-review)]/10 px-1.5 py-0.5 text-[10px] text-review"
+              title="Live stream unavailable; polling for events"
+            >
               degraded mode
             </span>
           )}
@@ -256,7 +263,12 @@ export function RunCanvas(props: RunCanvasProps) {
           <div className="min-h-0 flex-1">
             <BrowserViewport />
           </div>
-          <div className="min-h-0 max-h-[45%] overflow-hidden rounded-[var(--radius-panel)] border border-hairline">
+          <div
+            className={cn(
+              'min-h-0 overflow-hidden rounded-[var(--radius-panel)] border border-hairline flex flex-col',
+              isTerminal ? 'flex-1' : 'max-h-[45%]',
+            )}
+          >
             <ClaimsTable />
           </div>
           <div className="shrink-0 px-1">

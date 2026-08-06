@@ -402,7 +402,7 @@ model Claim {
   /// Turns "verified extraction rate dropped after Tuesday's deploy" into one GROUP BY.
   promptVersion  String
 
-  confidence Decimal?     @db.Decimal(4, 3)
+  confidence Decimal?    @db.Decimal(4, 3)
   status     ClaimStatus @default(UNVERIFIED)
   ambiguity  String?     @db.Text
   /// Why a null is a null: "not_present" | "ambiguous" | "requires_human".

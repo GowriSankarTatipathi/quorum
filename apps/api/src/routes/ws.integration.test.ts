@@ -10,30 +10,64 @@ vi.mock('ioredis', async () => {
   const { EventEmitter } = await import('node:events');
   class MockRedis extends EventEmitter {
     status = 'ready';
-    ping() { return Promise.resolve('PONG'); }
-    quit() { return Promise.resolve(); }
-    subscribe() { return Promise.resolve(); }
-    unsubscribe() { return Promise.resolve(); }
-    lpush() { return Promise.resolve(1); }
-    expire() { return Promise.resolve(1); }
-    get() { return Promise.resolve(null); }
-    set() { return Promise.resolve('OK'); }
-    del() { return Promise.resolve(1); }
-    incr() { return Promise.resolve(1); }
-    pttl() { return Promise.resolve(-1); }
-    defineCommand() { }
-    rlflxFixed() { return Promise.resolve([0, 0]); }
-    rlflxSliding() { return Promise.resolve([0, 0]); }
-    call() { return Promise.resolve(null); }
-    disconnect() { return; }
+    ping() {
+      return Promise.resolve('PONG');
+    }
+    quit() {
+      return Promise.resolve();
+    }
+    subscribe() {
+      return Promise.resolve();
+    }
+    unsubscribe() {
+      return Promise.resolve();
+    }
+    lpush() {
+      return Promise.resolve(1);
+    }
+    expire() {
+      return Promise.resolve(1);
+    }
+    get() {
+      return Promise.resolve(null);
+    }
+    set() {
+      return Promise.resolve('OK');
+    }
+    del() {
+      return Promise.resolve(1);
+    }
+    incr() {
+      return Promise.resolve(1);
+    }
+    pttl() {
+      return Promise.resolve(-1);
+    }
+    defineCommand() {}
+    rlflxFixed() {
+      return Promise.resolve([0, 0]);
+    }
+    rlflxSliding() {
+      return Promise.resolve([0, 0]);
+    }
+    call() {
+      return Promise.resolve(null);
+    }
+    disconnect() {
+      return;
+    }
   }
   return { Redis: MockRedis, default: MockRedis };
 });
 
 vi.mock('bullmq', () => {
   class MockQueue {
-    add() { return Promise.resolve(); }
-    close() { return Promise.resolve(); }
+    add() {
+      return Promise.resolve();
+    }
+    close() {
+      return Promise.resolve();
+    }
   }
   return { Queue: MockQueue };
 });
@@ -72,16 +106,24 @@ vi.mock('@quorum/auth', () => ({
 
 vi.mock('@quorum/auth/server', () => ({
   AccessTokenDenylist: class {
-    isRevoked() { return Promise.resolve(false); }
+    isRevoked() {
+      return Promise.resolve(false);
+    }
   },
 }));
 
-vi.mock('@quorum/storage', () => ({
-  ArtifactStorage: class {
-    signedUrl() { return Promise.resolve('https://example.com/signed'); }
-  },
-  downloadFilename: () => 'export.xlsx',
-}));
+vi.mock('@quorum/storage', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    ArtifactStorage: class {
+      signedUrl() {
+        return Promise.resolve('https://example.com/signed');
+      }
+    },
+    downloadFilename: () => 'export.xlsx',
+  };
+});
 
 // ── Test ────────────────────────────────────────────────────────────────────────
 
@@ -122,7 +164,7 @@ describe('WebSocket /v1/ws Integration', () => {
 
   it('rejects connection if token is invalid', async () => {
     vi.mocked(verifyAccessToken).mockRejectedValueOnce(new Error('Invalid token'));
-    
+
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?runId=run123&token=invalid`);
     const code = await new Promise<number>((resolve) => {
       ws.addEventListener('close', (event) => resolve(event.code));
@@ -131,9 +173,13 @@ describe('WebSocket /v1/ws Integration', () => {
   });
 
   it('rejects connection if run is not found or not in org', async () => {
-    vi.mocked(verifyAccessToken).mockResolvedValueOnce({ sub: 'user_1', org: 'org_1', role: 'ADMIN' } as Awaited<ReturnType<typeof verifyAccessToken>>);
+    vi.mocked(verifyAccessToken).mockResolvedValueOnce({
+      sub: 'user_1',
+      org: 'org_1',
+      role: 'ADMIN',
+    } as Awaited<ReturnType<typeof verifyAccessToken>>);
     vi.mocked(runRepository).findByIdForOrg.mockResolvedValueOnce(null);
-    
+
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?runId=run123&token=valid`);
     const code = await new Promise<number>((resolve) => {
       ws.addEventListener('close', (event) => resolve(event.code));
@@ -142,17 +188,25 @@ describe('WebSocket /v1/ws Integration', () => {
   });
 
   it('connects, replays events, and forwards pubsub messages', async () => {
-    vi.mocked(verifyAccessToken).mockResolvedValue({ sub: 'user_1', org: 'org_1', role: 'ADMIN' } as Awaited<ReturnType<typeof verifyAccessToken>>);
-    vi.mocked(runRepository).findByIdForOrg.mockResolvedValue({ id: 'run123' } as Awaited<ReturnType<typeof runRepository.findByIdForOrg>>);
-    
+    vi.mocked(verifyAccessToken).mockResolvedValue({
+      sub: 'user_1',
+      org: 'org_1',
+      role: 'ADMIN',
+    } as Awaited<ReturnType<typeof verifyAccessToken>>);
+    vi.mocked(runRepository).findByIdForOrg.mockResolvedValue({ id: 'run123' } as Awaited<
+      ReturnType<typeof runRepository.findByIdForOrg>
+    >);
+
     const mockEvents = [
       { id: 'e1', seq: 1, type: 'agent.started', ts: new Date() },
       { id: 'e2', seq: 2, type: 'browser.started', ts: new Date() },
     ];
-    vi.mocked(eventRepository).listAfter.mockResolvedValue(mockEvents as Awaited<ReturnType<typeof eventRepository.listAfter>>);
-    
+    vi.mocked(eventRepository).listAfter.mockResolvedValue(
+      mockEvents as Awaited<ReturnType<typeof eventRepository.listAfter>>,
+    );
+
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?runId=run123&token=valid&cursor=0`);
-    
+
     const messages: Array<{ type: string; lastSeq?: number; seq?: number }> = [];
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener('message', (event) => {
@@ -174,7 +228,7 @@ describe('WebSocket /v1/ws Integration', () => {
 
     // Now test real-time event forwarding via Redis mock
     const liveEvent = { id: 'e3', seq: 3, type: 'agent.stopped' };
-    
+
     const messagePromise = new Promise<{ type: string; seq?: number }>((resolve) => {
       ws.addEventListener('message', (event) => {
         const data = event.data as string;
@@ -194,14 +248,22 @@ describe('WebSocket /v1/ws Integration', () => {
   });
 
   it('maintains connection stability without abnormal closure (10s)', async () => {
-    vi.mocked(verifyAccessToken).mockResolvedValue({ sub: 'user_1', org: 'org_1', role: 'ADMIN' } as Awaited<ReturnType<typeof verifyAccessToken>>);
-    vi.mocked(runRepository).findByIdForOrg.mockResolvedValue({ id: 'run_stable' } as Awaited<ReturnType<typeof runRepository.findByIdForOrg>>);
+    vi.mocked(verifyAccessToken).mockResolvedValue({
+      sub: 'user_1',
+      org: 'org_1',
+      role: 'ADMIN',
+    } as Awaited<ReturnType<typeof verifyAccessToken>>);
+    vi.mocked(runRepository).findByIdForOrg.mockResolvedValue({ id: 'run_stable' } as Awaited<
+      ReturnType<typeof runRepository.findByIdForOrg>
+    >);
     vi.mocked(eventRepository).listAfter.mockResolvedValue([]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?runId=run_stable&token=valid`);
 
     let closed = false;
-    ws.addEventListener('close', () => { closed = true; });
+    ws.addEventListener('close', () => {
+      closed = true;
+    });
 
     // Wait for connection to open and then hold for 10 seconds
     await new Promise<void>((resolve, reject) => {
@@ -213,7 +275,7 @@ describe('WebSocket /v1/ws Integration', () => {
 
     expect(closed).toBe(false);
     expect(ws.readyState).toBe(ws.OPEN);
-    
+
     ws.close();
   }, 15000); // Give the test up to 15s timeout
 });

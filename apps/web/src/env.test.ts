@@ -4,6 +4,7 @@ import { isGoogleEnabled, isMagicLinkEnabled, loadServerEnv } from './env';
 const base = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgresql://u:p@localhost:5432/quorum',
+  REDIS_URL: 'redis://localhost:6379',
   AUTH_SECRET: 'a'.repeat(32),
   JWT_SECRET: 'b'.repeat(32),
 } as NodeJS.ProcessEnv;

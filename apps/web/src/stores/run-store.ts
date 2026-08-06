@@ -99,7 +99,8 @@ export interface RunStore {
   liveViewUrl: string | null;
   browserSessionState: 'not_started' | 'open' | 'closed';
 
-  connectionState: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'auth_failed';
+  connectionState:
+    'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'auth_failed';
   disconnectCode: number | null;
   disconnectReason: string | null;
   fallbackMode: boolean;
@@ -116,7 +117,11 @@ export interface RunStore {
 
   reset: (runId: string) => void;
   setConnected: (connected: boolean) => void;
-  setConnectionState: (state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'auth_failed', code?: number | null, reason?: string | null) => void;
+  setConnectionState: (
+    state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'auth_failed',
+    code?: number | null,
+    reason?: string | null,
+  ) => void;
   setFallbackMode: (on: boolean) => void;
   setSummaryMode: (on: boolean) => void;
   applyEvent: (event: StreamEvent) => void;
@@ -560,7 +565,7 @@ function applyOne(state: RunStore, event: StreamEvent): Partial<RunStore> {
   const events = (TRANSIENT_EVENTS as unknown as Set<string>).has(event.type)
     ? state.events
     : [...state.events, event].slice(-MAX_EVENTS);
-  
+
   const projected = reduceEvent(state, event);
 
   const diff: Partial<RunStore> = {};

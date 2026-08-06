@@ -123,7 +123,9 @@ export class AnthropicProvider implements LlmProvider {
           // The vendor's own error type is more precise than the status code: an
           // `overloaded_error` arrives as 529 and means retry, an `invalid_request_error`
           // as 400 and means stop.
-          classifyVendorErrorType(vendorType) ?? classifyErrorText(detail) ?? classifyHttpStatus(response.status),
+          classifyVendorErrorType(vendorType) ??
+            classifyErrorText(detail) ??
+            classifyHttpStatus(response.status),
           `Anthropic responded ${String(response.status)}${vendorType ? ` (${vendorType})` : ''}: ${detail.slice(0, 300)}`,
           this.name,
           request.model,

@@ -12,30 +12,66 @@ vi.mock('ioredis', async () => {
   const { EventEmitter } = await import('node:events');
   class MockRedis extends EventEmitter {
     status = 'ready';
-    ping() { return Promise.resolve('PONG'); }
-    quit() { return Promise.resolve(); }
-    subscribe() { return Promise.resolve(); }
-    unsubscribe() { return Promise.resolve(); }
-    lpush() { return Promise.resolve(1); }
-    expire() { return Promise.resolve(1); }
-    get() { return Promise.resolve(null); }
-    set() { return Promise.resolve('OK'); }
-    del() { return Promise.resolve(1); }
-    incr() { return Promise.resolve(1); }
-    pttl() { return Promise.resolve(-1); }
-    defineCommand() { /* @fastify/rate-limit calls this to register lua scripts */ }
-    rlflxFixed() { return Promise.resolve([0, 0]); }
-    rlflxSliding() { return Promise.resolve([0, 0]); }
-    call() { return Promise.resolve(null); }
-    disconnect() { return; }
+    ping() {
+      return Promise.resolve('PONG');
+    }
+    quit() {
+      return Promise.resolve();
+    }
+    subscribe() {
+      return Promise.resolve();
+    }
+    unsubscribe() {
+      return Promise.resolve();
+    }
+    lpush() {
+      return Promise.resolve(1);
+    }
+    expire() {
+      return Promise.resolve(1);
+    }
+    get() {
+      return Promise.resolve(null);
+    }
+    set() {
+      return Promise.resolve('OK');
+    }
+    del() {
+      return Promise.resolve(1);
+    }
+    incr() {
+      return Promise.resolve(1);
+    }
+    pttl() {
+      return Promise.resolve(-1);
+    }
+    defineCommand() {
+      /* @fastify/rate-limit calls this to register lua scripts */
+    }
+    rlflxFixed() {
+      return Promise.resolve([0, 0]);
+    }
+    rlflxSliding() {
+      return Promise.resolve([0, 0]);
+    }
+    call() {
+      return Promise.resolve(null);
+    }
+    disconnect() {
+      return;
+    }
   }
   return { Redis: MockRedis, default: MockRedis };
 });
 
 vi.mock('bullmq', () => {
   class MockQueue {
-    add() { return Promise.resolve(); }
-    close() { return Promise.resolve(); }
+    add() {
+      return Promise.resolve();
+    }
+    close() {
+      return Promise.resolve();
+    }
   }
   return { Queue: MockQueue };
 });
@@ -70,16 +106,24 @@ vi.mock('@quorum/auth', () => ({
 
 vi.mock('@quorum/auth/server', () => ({
   AccessTokenDenylist: class {
-    isRevoked() { return Promise.resolve(false); }
+    isRevoked() {
+      return Promise.resolve(false);
+    }
   },
 }));
 
-vi.mock('@quorum/storage', () => ({
-  ArtifactStorage: class {
-    signedUrl() { return Promise.resolve('https://example.com/signed'); }
-  },
-  downloadFilename: () => 'export.xlsx',
-}));
+vi.mock('@quorum/storage', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    ArtifactStorage: class {
+      signedUrl() {
+        return Promise.resolve('https://example.com/signed');
+      }
+    },
+    downloadFilename: () => 'export.xlsx',
+  };
+});
 
 // ── Test ────────────────────────────────────────────────────────────────────────
 
@@ -128,6 +172,13 @@ const EXPECTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'GET', path: '/v1/ws' },
 ];
 
+import { hasStorage, getStorage } from '../services/storage.js';
+
+const dynamicallyExpectedRoutes = [...EXPECTED_ROUTES];
+if (hasStorage() && getStorage().kind === 'filesystem') {
+  dynamicallyExpectedRoutes.push({ method: 'GET', path: '/v1/artifacts' });
+}
+
 describe('route registration', () => {
   let app: FastifyInstance;
 
@@ -160,7 +211,7 @@ describe('route registration', () => {
     const actual = registeredRoutes();
     const actualSet = new Set(actual.map((r) => `${r.method} ${r.path}`));
 
-    for (const expected of EXPECTED_ROUTES) {
+    for (const expected of dynamicallyExpectedRoutes) {
       // The WebSocket upgrade route is not part of the OpenAPI spec, so we
       // check it separately below.
       if (expected.path === '/v1/ws') continue;
@@ -174,7 +225,7 @@ describe('route registration', () => {
 
   it('does not contain unexpected application routes', () => {
     const actual = registeredRoutes();
-    const expectedSet = new Set(EXPECTED_ROUTES.map((r) => `${r.method} ${r.path}`));
+    const expectedSet = new Set(dynamicallyExpectedRoutes.map((r) => `${r.method} ${r.path}`));
 
     for (const route of actual) {
       expect(

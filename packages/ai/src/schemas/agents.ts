@@ -35,7 +35,10 @@ export const BrowserActionOutputSchema = z.object({
     }),
     z.object({ type: z.literal('press'), key: z.string().min(1).max(30) }),
     z.object({ type: z.literal('screenshot') }),
-    z.object({ type: z.literal('extract_ready'), note: z.string().max(500).nullable().default(null) }),
+    z.object({
+      type: z.literal('extract_ready'),
+      note: z.string().max(500).nullable().default(null),
+    }),
     z.object({ type: z.literal('give_up'), reason: z.string().min(3).max(500) }),
   ]),
   confidence: z.number().min(0).max(1).nullable(),
@@ -133,7 +136,12 @@ export const CritiqueOutputSchema = z.object({
         claimIds: z.array(z.string()).max(50),
         remedy: z.object({
           action: z.enum(['re_extract', 'drop', 'merge', 'ask_human', 'accept']),
-          params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())])).nullable(),
+          params: z
+            .record(
+              z.string(),
+              z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())]),
+            )
+            .nullable(),
         }),
       }),
     )

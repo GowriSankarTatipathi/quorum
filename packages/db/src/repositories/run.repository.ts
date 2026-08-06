@@ -100,7 +100,12 @@ export const runRepository = {
     return toRun(
       await prisma.run.update({
         where: { id },
-        data: { status: 'FAILED', errorCode: code, errorDetail: detail as Prisma.InputJsonValue, endedAt: new Date() }, // Prisma requires InputJsonValue for json fields
+        data: {
+          status: 'FAILED',
+          errorCode: code,
+          errorDetail: detail as Prisma.InputJsonValue,
+          endedAt: new Date(),
+        }, // Prisma requires InputJsonValue for json fields
       }),
     );
   },

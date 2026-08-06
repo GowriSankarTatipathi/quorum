@@ -13,6 +13,8 @@ export interface ReasoningAgentInput {
   /** The schema the Planner declared for this step. */
   outputSchema: Record<string, string> | null;
   url: string;
+  /** Pairs already extracted in this run, to avoid duplicating them. */
+  knownFields: { entity: string; field: string }[];
   /** Page text and tree. The agent sees content, not action history. */
   pageContent: string;
 }
@@ -24,6 +26,11 @@ export function buildReasoningPrompt(input: ReasoningAgentInput): {
   const schemaBlock = input.outputSchema
     ? `<expected_fields>\n${JSON.stringify(input.outputSchema, null, 2)}\n</expected_fields>`
     : '<expected_fields>none declared — extract what the objective asks for</expected_fields>';
+
+  const knownFieldsBlock =
+    input.knownFields.length > 0
+      ? `<known_fields>\n${input.knownFields.map((f) => `- ${f.entity}: ${f.field}`).join('\n')}\n</known_fields>`
+      : '<known_fields>none</known_fields>';
 
   const system = `${IDENTITY}
 
@@ -54,6 +61,8 @@ Quote enough to be identifiable — "$12 /user/month", not "12".
    normalises, and it can only do that correctly if you did not round first.
 5. If the page contains none of the expected fields, return an empty claims array and
    explain in "note". An empty answer is a real answer.
+6. Do NOT extract any (entity, field) pair listed in <known_fields>. These were captured
+   in previous steps of this run and extracting them again creates duplicates.
 </rules>
 
 ${DOMAIN_PRIORS}
@@ -83,6 +92,7 @@ ${JSON_ONLY}
   const user = `<objective>${input.stepObjective}</objective>
 <source_url>${input.url}</source_url>
 ${schemaBlock}
+${knownFieldsBlock}
 <page_content>
 ${input.pageContent}
 </page_content>`;

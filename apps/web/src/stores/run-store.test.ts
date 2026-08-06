@@ -63,10 +63,16 @@ describe('status projection', () => {
 
   it('preserves planHash when run.status.changed to AWAITING_APPROVAL is applied after plan.completed', () => {
     const store = fresh();
-    store.getState().applyEvent(event('plan.completed', { stepCount: 2, totalEstimatedUsd: 0.1, planHash: 'hash_xyz' }));
+    store
+      .getState()
+      .applyEvent(
+        event('plan.completed', { stepCount: 2, totalEstimatedUsd: 0.1, planHash: 'hash_xyz' }),
+      );
     expect(store.getState().planHash).toBe('hash_xyz');
-    
-    store.getState().applyEvent(event('run.status.changed', { from: 'PLANNING', to: 'AWAITING_APPROVAL' }));
+
+    store
+      .getState()
+      .applyEvent(event('run.status.changed', { from: 'PLANNING', to: 'AWAITING_APPROVAL' }));
     expect(store.getState().status).toBe('AWAITING_APPROVAL');
     expect(store.getState().planHash).toBe('hash_xyz');
   });
@@ -79,18 +85,34 @@ describe('status projection', () => {
 
   it('clears in-progress agent lanes when a run reaches a terminal state', () => {
     const store = fresh();
-    store.getState().applyEvent(event('agent.started', { agent: 'verification', stepIndex: null }, { correlationId: 'v1' }));
-    store.getState().applyEvent(event('agent.started', { agent: 'browser', stepIndex: 0 }, { correlationId: 'b1' }));
-    store.getState().applyEvent(event('agent.finished', { agent: 'browser', durationMs: 100, confidence: 1 }, { correlationId: 'b1' }));
-    
+    store
+      .getState()
+      .applyEvent(
+        event('agent.started', { agent: 'verification', stepIndex: null }, { correlationId: 'v1' }),
+      );
+    store
+      .getState()
+      .applyEvent(
+        event('agent.started', { agent: 'browser', stepIndex: 0 }, { correlationId: 'b1' }),
+      );
+    store
+      .getState()
+      .applyEvent(
+        event(
+          'agent.finished',
+          { agent: 'browser', durationMs: 100, confidence: 1 },
+          { correlationId: 'b1' },
+        ),
+      );
+
     expect(store.getState().agents.verification).toBe('running');
     expect(store.getState().agents.browser).toBe('done');
 
     store.getState().applyEvent(event('run.status.changed', { from: 'VERIFYING', to: 'FAILED' }));
-    
+
     expect(store.getState().agents.verification).toBe('failed');
     expect(store.getState().agents.browser).toBe('done');
-    
+
     // Ensure no lane is 'running'
     for (const val of Object.values(store.getState().agents)) {
       expect(val).not.toBe('running');
@@ -270,7 +292,9 @@ describe('browser viewport state', () => {
     const store = fresh();
     expect(store.getState().browserSessionState).toBe('not_started');
 
-    store.getState().applyEvent(event('browser.session.opened', { liveViewUrl: 'http://localhost' }));
+    store
+      .getState()
+      .applyEvent(event('browser.session.opened', { liveViewUrl: 'http://localhost' }));
     expect(store.getState().browserSessionState).toBe('open');
     expect(store.getState().liveViewUrl).toBe('http://localhost');
 
@@ -396,18 +420,18 @@ describe('event buffer', () => {
 describe('terminal status handling', () => {
   it('clears all running lanes when the run fails', () => {
     const store = fresh();
-    
+
     // Start two agents
     store.getState().applyEvent(event('agent.started', { agent: 'browser', stepIndex: 0 }));
     store.getState().applyEvent(event('agent.started', { agent: 'verification', stepIndex: null }));
-    
+
     // Both should be running
     expect(store.getState().agents['browser']).toBe('running');
     expect(store.getState().agents['verification']).toBe('running');
-    
+
     // Run fails
     store.getState().applyEvent(event('run.status.changed', { from: 'EXECUTING', to: 'FAILED' }));
-    
+
     // Browser is now failed, verification is failed (wait, all running agents become failed on FAILED)
     expect(store.getState().agents['browser']).toBe('failed');
     expect(store.getState().agents['verification']).toBe('failed');
@@ -416,9 +440,11 @@ describe('terminal status handling', () => {
   it('marks running lanes as idle when the run completes', () => {
     const store = fresh();
     store.getState().applyEvent(event('agent.started', { agent: 'browser', stepIndex: 0 }));
-    
-    store.getState().applyEvent(event('run.status.changed', { from: 'EXECUTING', to: 'COMPLETED' }));
-    
+
+    store
+      .getState()
+      .applyEvent(event('run.status.changed', { from: 'EXECUTING', to: 'COMPLETED' }));
+
     expect(store.getState().agents['browser']).toBe('idle');
   });
 });

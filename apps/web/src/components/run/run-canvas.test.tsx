@@ -20,7 +20,7 @@ describe('RunCanvas SSR', () => {
         planHash="hash"
         goal="Test goal"
         startedAt={new Date('2026-08-04T12:00:00Z').toISOString()}
-      />
+      />,
     );
     expect(markup).toContain('<span>0:00</span>');
   });

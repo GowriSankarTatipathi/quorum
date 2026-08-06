@@ -9,7 +9,11 @@ export const authEventRepository = {
    * but not UPDATE or DELETE: an audit trail that can be silently edited is not one.
    */
   async record(input: CreateAuthEventInput): Promise<AuthEventRecord> {
-    return toAuthEvent(await prisma.authEvent.create({ data: input as Prisma.AuthEventUncheckedCreateInput /* Prisma requires explicit cast for relations vs unchecked scalars */ }));
+    return toAuthEvent(
+      await prisma.authEvent.create({
+        data: input as Prisma.AuthEventUncheckedCreateInput /* Prisma requires explicit cast for relations vs unchecked scalars */,
+      }),
+    );
   },
 
   /**
@@ -18,7 +22,9 @@ export const authEventRepository = {
    */
   async recordSafely(input: CreateAuthEventInput): Promise<void> {
     try {
-      await prisma.authEvent.create({ data: input as Prisma.AuthEventUncheckedCreateInput /* Prisma requires explicit cast for relations vs unchecked scalars */ });
+      await prisma.authEvent.create({
+        data: input as Prisma.AuthEventUncheckedCreateInput /* Prisma requires explicit cast for relations vs unchecked scalars */,
+      });
     } catch (error) {
       console.error('[quorum] failed to record auth event', input.type, error);
     }

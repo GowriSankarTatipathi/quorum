@@ -30,11 +30,13 @@ export function ClaimsTable() {
   const flaggedIds = new Set(critiques.flatMap((critique) => critique.claimIds));
 
   return (
-    <section aria-label="Results" className="flex min-h-0 flex-col">
+    <section aria-label="Results" className="flex h-full min-h-0 flex-col">
       <header className="flex items-center gap-2 border-b border-hairline px-3 py-2">
         <h2 className="text-xs font-medium uppercase tracking-wide text-fg-muted">Results</h2>
         <span className="ml-auto font-mono text-[11px] text-fg-subtle">
-          {rows.length} {rows.length === 1 ? 'claim' : 'claims'}
+          {rows.length > 5
+            ? `${rows.length} claims (scroll to view all)`
+            : `${rows.length} ${rows.length === 1 ? 'claim' : 'claims'}`}
         </span>
       </header>
 
@@ -45,9 +47,9 @@ export function ClaimsTable() {
           detail="Each value appears the moment it is read, with the page it came from. Stopping early keeps everything found so far."
         />
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-fg-muted/20">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-base">
+            <thead className="sticky top-0 z-10 bg-base">
               <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wide text-fg-subtle">
                 <th scope="col" className="px-3 py-1.5 font-normal">
                   Entity
@@ -77,7 +79,8 @@ export function ClaimsTable() {
                   status: claim.status,
                   // In the table, we assume grounded because ungrounded are not stored
                   grounded: true,
-                  verdicts: claim.status === 'CONTRADICTED' ? [{ verdict: 'CONTRADICTED' as const }] : [],
+                  verdicts:
+                    claim.status === 'CONTRADICTED' ? [{ verdict: 'CONTRADICTED' as const }] : [],
                 });
 
                 const isQuarantined = disposition === 'QUARANTINE';
@@ -85,9 +88,14 @@ export function ClaimsTable() {
                 return (
                   <tr key={claim.id} className="animate-[stream-in_150ms_cubic-bezier(0.2,0,0,1)]">
                     <td className="px-3 py-1.5">{claim.entity}</td>
-                    <td className="px-3 py-1.5 font-mono text-[11px] text-fg-muted">{claim.field}</td>
+                    <td className="px-3 py-1.5 font-mono text-[11px] text-fg-muted">
+                      {claim.field}
+                    </td>
                     <td
-                      className={cn('px-3 py-1.5 font-mono tabular-nums', STATUS_STYLE[claim.status])}
+                      className={cn(
+                        'px-3 py-1.5 font-mono tabular-nums',
+                        STATUS_STYLE[claim.status],
+                      )}
                     >
                       <div className={cn(isQuarantined && 'line-through opacity-50')}>
                         {claim.value === null ? (
@@ -108,7 +116,13 @@ export function ClaimsTable() {
                     </td>
                     <td className="px-3 py-1.5 font-mono text-[11px]">
                       <div className="flex flex-col gap-0.5">
-                        <span className={cn('uppercase', STATUS_STYLE[isQuarantined ? 'QUARANTINED' : claim.status] ?? 'text-fg-subtle')}>
+                        <span
+                          className={cn(
+                            'uppercase',
+                            STATUS_STYLE[isQuarantined ? 'QUARANTINED' : claim.status] ??
+                              'text-fg-subtle',
+                          )}
+                        >
                           {isQuarantined ? 'QUARANTINED' : claim.status}
                         </span>
                         {disposition !== 'ACCEPT' && !isQuarantined && (
@@ -116,19 +130,20 @@ export function ClaimsTable() {
                             {disposition.replace('_', ' ')}
                           </span>
                         )}
-                        {claim.status === 'CONTRADICTED' && claim.independentReading !== undefined && (
-                          <details className="mt-1 group">
-                            <summary className="cursor-pointer text-[10px] text-failed hover:underline outline-none">
-                              View reading
-                            </summary>
-                            <div className="mt-1 rounded bg-canvas/50 p-1.5 text-fg-muted">
-                              Verifier read:{' '}
-                              <span className="font-medium text-fg">
-                                {renderValue(claim.independentReading)}
-                              </span>
-                            </div>
-                          </details>
-                        )}
+                        {claim.status === 'CONTRADICTED' &&
+                          claim.independentReading !== undefined && (
+                            <details className="mt-1 group">
+                              <summary className="cursor-pointer text-[10px] text-failed hover:underline outline-none">
+                                View reading
+                              </summary>
+                              <div className="mt-1 rounded bg-canvas/50 p-1.5 text-fg-muted">
+                                Verifier read:{' '}
+                                <span className="font-medium text-fg">
+                                  {renderValue(claim.independentReading)}
+                                </span>
+                              </div>
+                            </details>
+                          )}
                       </div>
                     </td>
                     <td className="px-3 py-1.5">

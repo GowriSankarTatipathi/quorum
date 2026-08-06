@@ -62,7 +62,7 @@ const telemetry: LlmTelemetrySink = {
 
 const providers = createProviders(config, { recordings: RECORDED_COMPLETIONS });
 const candidates = resolveCandidateModels(config.modelOverrides, providers, (model, reason) =>
-  console.log(`      ! model unavailable: ${model} (${reason})`)
+  console.log(`      ! model unavailable: ${model} (${reason})`),
 );
 
 const router = new LlmRouter({
@@ -79,7 +79,7 @@ const workerRouter = createWorkerRouter(telemetry);
 assert.deepStrictEqual(
   workerRouter.candidates,
   router.candidates,
-  'Integration harness and worker must resolve identical LLM candidates'
+  'Integration harness and worker must resolve identical LLM candidates',
 );
 
 // ── Infrastructure ──────────────────────────────────────────────────────────
@@ -314,6 +314,7 @@ const reasoningPrompt = PROMPT_REGISTRY.reasoning.build({
   outputSchema: plan.data.steps[0]!.outputSchema,
   url: snapshot.url,
   pageContent: snapshot.tree,
+  knownFields: [],
 });
 const extraction = await time('reasoning_ms', () =>
   router.call(
@@ -479,7 +480,8 @@ const knownIds = new Set(stored.map((c) => c.id));
 const critiques: CritiqueRecord[] = [];
 for (const c of critique.data.critiques) {
   const cited = c.claimIds.filter((id) => knownIds.has(id));
-  const ids = c.claimIds.length === 0 ? [] : (cited.length > 0 ? cited : stored.slice(0, 1).map((s) => s.id));
+  const ids =
+    c.claimIds.length === 0 ? [] : cited.length > 0 ? cited : stored.slice(0, 1).map((s) => s.id);
   const cid = `crt_${randomUUID().slice(0, 8)}`;
   await db.query(
     `INSERT INTO "Critique"(id,"runId",kind,severity,message,"claimIds",remedy) VALUES ($1,$2,$3,$4,$5,$6,$7)`,

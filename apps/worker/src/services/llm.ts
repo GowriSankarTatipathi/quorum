@@ -33,10 +33,8 @@ function getProviders(): ProviderSet {
 
 function getCandidates(): Record<LlmAgentId, ModelId[]> {
   if (!candidates) {
-    candidates = resolveCandidateModels(
-      llmConfig.modelOverrides,
-      getProviders(),
-      (model, reason) => logger.warn({ model, reason }, 'Model unavailable due to missing API key'),
+    candidates = resolveCandidateModels(llmConfig.modelOverrides, getProviders(), (model, reason) =>
+      logger.warn({ model, reason }, 'Model unavailable due to missing API key'),
     );
   }
   return candidates;

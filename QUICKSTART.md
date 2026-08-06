@@ -46,7 +46,7 @@ The switch is automatic. Nothing else changes.
 
 **What to watch for on your first live run:**
 
-- Does the browser agent notice the billing toggle defaults to *annual* and switch it to
+- Does the browser agent notice the billing toggle defaults to _annual_ and switch it to
   monthly before extracting? That behaviour is the product's whole thesis.
 - Does anything get `QUARANTINED`? That is the grounding check rejecting a value whose
   quoted text is not on the page — it runs with no model involved.
@@ -62,12 +62,12 @@ pnpm db:seed                  # optional: a finished demo run to look at
 pnpm dev
 ```
 
-| | |
-| --- | --- |
-| App | http://localhost:3000 |
-| API docs | http://localhost:3001/docs |
-| Mailpit (sign-in links land here) | http://localhost:8025 |
-| Fixture site | http://localhost:3002 |
+|                                   |                            |
+| --------------------------------- | -------------------------- |
+| App                               | http://localhost:3000      |
+| API docs                          | http://localhost:3001/docs |
+| Mailpit (sign-in links land here) | http://localhost:8025      |
+| Fixture site                      | http://localhost:3002      |
 
 Sign in with **Email me a sign-in link**, then open http://localhost:8025 and click it.
 The first person to sign up owns a new workspace.

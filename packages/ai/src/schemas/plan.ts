@@ -3,7 +3,7 @@ import { z } from 'zod';
 /** Agents a plan step may route through. The Planner cannot invent a pipeline. */
 export const PLAN_AGENTS = ['browser', 'reasoning', 'verification', 'formatter'] as const;
 
-const AGENT_SYNONYMS: Record<string, typeof PLAN_AGENTS[number]> = {
+const AGENT_SYNONYMS: Record<string, (typeof PLAN_AGENTS)[number]> = {
   extraction: 'reasoning',
   extract: 'reasoning',
   extractor: 'reasoning',
@@ -25,7 +25,7 @@ export const PlanStepSchema = z.object({
           }
         }
         return val;
-      }, z.enum(PLAN_AGENTS))
+      }, z.enum(PLAN_AGENTS)),
     )
     .min(1)
     .max(4),
@@ -35,38 +35,41 @@ export const PlanStepSchema = z.object({
    * Verification uses it to know what to check, and the UI renders it as `Expects:`.
    */
   outputSchema: z
-    .preprocess((val) => {
-      if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-        const normalised: Record<string, unknown> = {};
-        let changed = false;
-        
-        for (const [key, v] of Object.entries(val)) {
-          if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-            // A weak model might nest objects, either as JSON Schema with a 'type' property
-            // or just by wrapping fields in another object.
-            const obj = v as Record<string, unknown>;
-            if (typeof obj.type === 'string') {
-              normalised[key] = obj.type;
-              changed = true;
-              console.warn(
-                `[schema] outputSchema field "${key}" normalised from nested object to type "${obj.type}"`,
-              );
+    .preprocess(
+      (val) => {
+        if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+          const normalised: Record<string, unknown> = {};
+          let changed = false;
+
+          for (const [key, v] of Object.entries(val)) {
+            if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+              // A weak model might nest objects, either as JSON Schema with a 'type' property
+              // or just by wrapping fields in another object.
+              const obj = v as Record<string, unknown>;
+              if (typeof obj.type === 'string') {
+                normalised[key] = obj.type;
+                changed = true;
+                console.warn(
+                  `[schema] outputSchema field "${key}" normalised from nested object to type "${obj.type}"`,
+                );
+              } else {
+                const keysDesc = `{${Object.keys(obj).join(',')}}`;
+                normalised[key] = keysDesc;
+                changed = true;
+                console.warn(
+                  `[schema] outputSchema field "${key}" normalised from nested object to description "${keysDesc}"`,
+                );
+              }
             } else {
-              const keysDesc = `{${Object.keys(obj).join(',')}}`;
-              normalised[key] = keysDesc;
-              changed = true;
-              console.warn(
-                `[schema] outputSchema field "${key}" normalised from nested object to description "${keysDesc}"`,
-              );
+              normalised[key] = v;
             }
-          } else {
-            normalised[key] = v;
           }
+          return changed ? normalised : val;
         }
-        return changed ? normalised : val;
-      }
-      return val;
-    }, z.record(z.string(), z.string()))
+        return val;
+      },
+      z.record(z.string(), z.string()),
+    )
     .nullable(),
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   /** Difficulties predicted before the run starts, e.g. a demo-gated pricing page. */

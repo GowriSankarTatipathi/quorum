@@ -85,7 +85,7 @@ export function registerWebsocket(app: FastifyInstance): void {
             if (!summaryMode) {
               app.log.warn(
                 { runId, bufferedAmount: socket.bufferedAmount },
-                'WebSocket backpressure threshold crossed: turning summaryMode ON'
+                'WebSocket backpressure threshold crossed: turning summaryMode ON',
               );
               // Degrading fidelity while preserving meaning is the right failure mode for
               // someone on hotel wi-fi; telling them it happened preserves trust.
@@ -95,7 +95,7 @@ export function registerWebsocket(app: FastifyInstance): void {
           } else if (summaryMode && socket.bufferedAmount === 0) {
             app.log.warn(
               { runId, bufferedAmount: socket.bufferedAmount },
-              'WebSocket backpressure resolved: turning summaryMode OFF'
+              'WebSocket backpressure resolved: turning summaryMode OFF',
             );
             summaryMode = false;
             send({ type: '__full_mode' });
@@ -128,10 +128,7 @@ export function registerWebsocket(app: FastifyInstance): void {
     socket.on('close', (code, reason) => {
       void (async () => {
         try {
-          app.log.info(
-            { runId, code, reason: reason?.toString() },
-            'ws connection closed',
-          );
+          app.log.info({ runId, code, reason: reason?.toString() }, 'ws connection closed');
           if (!subscription) return;
           redisSubscriber.off('message', subscription.handler);
           // Only unsubscribe when no other socket is watching this run; a shared connection

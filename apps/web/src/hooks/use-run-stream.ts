@@ -45,7 +45,7 @@ export function useRunStream(runId: string, accessToken: string | null): void {
     };
 
     let backoff = 500;
-    
+
     const pollRest = async (): Promise<void> => {
       if (closed.current) return;
       const cursor = useRunStore.getState().lastSeq;
@@ -85,6 +85,7 @@ export function useRunStream(runId: string, accessToken: string | null): void {
 
       ws.onmessage = (message: MessageEvent<string>) => {
         const parsed = JSON.parse(message.data) as StreamEvent & { type: string };
+
         // Control frames from the gateway, not run events.
         if (parsed.type === '__summary_mode') {
           useRunStore.getState().setSummaryMode(true);
@@ -102,16 +103,16 @@ export function useRunStream(runId: string, accessToken: string | null): void {
 
       ws.onclose = (event: CloseEvent) => {
         if (closed.current) return;
-        
+
         if (event.code === 4401 || event.code === 4404 || event.code === 4400) {
           useRunStore.getState().setConnectionState('auth_failed', event.code, event.reason);
           return;
         }
 
         useRunStore.getState().setConnectionState('disconnected', event.code, event.reason);
-        
+
         void pollRest();
-        
+
         backoff = Math.min(backoff * 2, 10_000);
         window.setTimeout(connect, backoff);
       };

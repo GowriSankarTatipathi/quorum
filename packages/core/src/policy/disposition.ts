@@ -40,7 +40,6 @@ export function claimDisposition(
 
   if (input.confidence === null) return 'HUMAN_REVIEW';
 
-
   if (input.status === 'HUMAN_CORRECTED') return 'ACCEPT';
   if (input.status === 'SUPERSEDED') return 'QUARANTINE';
 

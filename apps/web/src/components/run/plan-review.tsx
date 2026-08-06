@@ -150,13 +150,7 @@ export function PlanReview({
         className="mt-6 flex items-center gap-2"
       >
         <p className="font-mono text-[10px] text-fg-subtle">plan {planHash.slice(0, 12)}</p>
-        <Button
-          type="submit"
-          variant="primary"
-          size="md"
-          className="ml-auto"
-          disabled={pending}
-        >
+        <Button type="submit" variant="primary" size="md" className="ml-auto" disabled={pending}>
           Approve &amp; run
           <Kbd className="border-white/25 bg-white/10 text-white/80">⌘↵</Kbd>
         </Button>

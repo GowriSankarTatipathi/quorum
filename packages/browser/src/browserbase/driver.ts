@@ -133,7 +133,10 @@ export class BrowserbaseDriver implements BrowserDriver {
     return this.inner.screenshot(session, opts);
   }
 
-  streamScreencast(session: Session, onFrame: (buffer: Buffer) => void): Promise<() => Promise<void>> {
+  streamScreencast(
+    session: Session,
+    onFrame: (buffer: Buffer) => void,
+  ): Promise<() => Promise<void>> {
     return this.inner.streamScreencast(session, onFrame);
   }
   capture(session: Session): Promise<PageCapture> {

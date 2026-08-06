@@ -21,7 +21,9 @@ describe('cacheKey', () => {
   it('differs when the prompt, model or agent differs', async () => {
     const base = await cacheKey('reasoning', request());
     expect(await cacheKey('reasoning', request({ user: 'other' }))).not.toBe(base);
-    expect(await cacheKey('reasoning', request({ model: 'claude-haiku-4-5-20251001' }))).not.toBe(base);
+    expect(await cacheKey('reasoning', request({ model: 'claude-haiku-4-5-20251001' }))).not.toBe(
+      base,
+    );
     expect(await cacheKey('verification', request())).not.toBe(base);
   });
 

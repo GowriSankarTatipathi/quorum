@@ -33,7 +33,7 @@ export function GoalComposer() {
   return (
     <form action="/runs/new" method="GET" className="w-full max-w-2xl">
       <input type="hidden" name="mode" value={mode} />
-      
+
       <h1 className="mb-8 text-center text-2xl font-medium tracking-tight text-fg">
         What should the agents do?
       </h1>

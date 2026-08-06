@@ -103,7 +103,8 @@ export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfi
   const track = (key: string, value: unknown, mask = false) => {
     const src = getSource(key, value);
     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-    const displayValue = (value === undefined || value === null) ? 'unset' : (mask ? maskKey(stringValue) : stringValue);
+    const displayValue =
+      value === undefined || value === null ? 'unset' : mask ? maskKey(stringValue) : stringValue;
     provenance.push(`${key}=${displayValue} (from ${src})`);
   };
 
@@ -166,9 +167,7 @@ export function loadLlmConfig(source: NodeJS.ProcessEnv = process.env): LlmConfi
 
 /** Redacts everything secret. Safe to log at boot and to include in a support bundle. */
 export function describeLlmConfig(config: LlmConfig): string {
-  const providers = [
-    config.anthropic ? `anthropic(${maskKey(config.anthropic.apiKey)})` : null,
-  ]
+  const providers = [config.anthropic ? `anthropic(${maskKey(config.anthropic.apiKey)})` : null]
     .filter(Boolean)
     .join(', ');
   return `mode=${config.mode} providers=[${providers || 'none'}] timeout=${String(config.timeoutMs)}ms`;

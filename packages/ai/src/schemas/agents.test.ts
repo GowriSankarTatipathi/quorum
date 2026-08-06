@@ -181,14 +181,14 @@ describe('CritiqueOutputSchema', () => {
             severity: 'BLOCKING',
             message: 'Wrong unit',
             claimIds: ['clm_1'],
-            remedy: { 
-              action: 're_extract', 
-              params: { 
-                entity: 'Expensify', 
-                drop_ids: ['clm_2', 'clm_3'], 
-                keep_one: true, 
-                threshold: 10 
-              } 
+            remedy: {
+              action: 're_extract',
+              params: {
+                entity: 'Expensify',
+                drop_ids: ['clm_2', 'clm_3'],
+                keep_one: true,
+                threshold: 10,
+              },
             },
           },
         ],

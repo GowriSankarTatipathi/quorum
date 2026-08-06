@@ -45,6 +45,7 @@ describe('reasoning prompt', () => {
     outputSchema: { plan: 'string', price_usd: 'number|null' },
     url: 'https://brex.com/pricing',
     pageContent: 'Premium $12 /user/month',
+    knownFields: [],
   });
 
   it('tells the model the grounding check is mechanical, not a matter of trust', () => {
@@ -71,6 +72,7 @@ describe('reasoning prompt', () => {
       outputSchema: null,
       url: 'https://a.test',
       pageContent: 'y',
+      knownFields: [],
     });
     expect(noSchema.user).toContain('none declared');
   });

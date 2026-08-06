@@ -1,4 +1,3 @@
-
 import { prisma } from '../client.js';
 import { decimalToMicroUsd, microUsdToDecimalString } from '../money.js';
 import type { CreateLlmCallInput, LlmCallRecord } from '../types.js';

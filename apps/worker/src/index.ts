@@ -23,10 +23,13 @@ import { loadLlmConfig } from '@quorum/ai';
 async function main(): Promise<void> {
   // Debug check: where are the stale config variables coming from?
   const suspiciousEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([k]) => k.startsWith('OPENAI_') || k.startsWith('QUORUM_'))
+    Object.entries(process.env).filter(([k]) => k.startsWith('OPENAI_') || k.startsWith('QUORUM_')),
   );
   if (Object.keys(suspiciousEnv).length > 0) {
-    logger.warn({ suspiciousEnv }, 'Found suspicious environment variables at startup. These may be overriding the clean .env.local!');
+    logger.warn(
+      { suspiciousEnv },
+      'Found suspicious environment variables at startup. These may be overriding the clean .env.local!',
+    );
   }
 
   logger.info(
@@ -50,22 +53,19 @@ async function main(): Promise<void> {
       'No LLM provider key found. Export ANTHROPIC_API_KEY before starting the worker — a worker that claims jobs it cannot run is worse than one that never started. To exercise the pipeline without a vendor, use `pnpm e2e`.',
     );
   }
-  
+
   logger.info(
-    { 
-      database, 
+    {
+      database,
       redis: redisCheck,
       llm: {
         mode: llmConfig.mode,
-        providers: [
-          llmConfig.anthropic ? 'anthropic' : null,
-
-        ].filter(Boolean),
+        providers: [llmConfig.anthropic ? 'anthropic' : null].filter(Boolean),
         overrides: llmConfig.modelOverrides,
         provenance: llmConfig.provenance,
-      }
-    }, 
-    'dependencies healthy'
+      },
+    },
+    'dependencies healthy',
   );
 
   heartbeat.start();

@@ -1,11 +1,11 @@
 import { artifactRepository, runRepository, type ArtifactKind } from '@quorum/db';
-import { ArtifactStorage, downloadFilename } from '@quorum/storage';
+import { downloadFilename } from '@quorum/storage';
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { env } from '../env.js';
 import { requireAuth } from '../plugins/auth.js';
 import { ApiError, notFound } from '../plugins/error-handler.js';
 import { enqueueExport } from '../services/queue.js';
+import { getStorage } from '../services/storage.js';
 
 const FORMATS = ['xlsx', 'csv', 'json'] as const;
 type Format = (typeof FORMATS)[number];
@@ -15,27 +15,6 @@ const KIND: Record<Format, ArtifactKind> = {
   csv: 'EXPORT_CSV',
   json: 'EXPORT_JSON',
 };
-
-let storage: ArtifactStorage | null = null;
-function getStorage(): ArtifactStorage {
-  if (!storage) {
-    if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
-      throw new ApiError(
-        503,
-        'E_STORAGE_UNCONFIGURED',
-        'Exports are not available on this deployment yet.',
-      );
-    }
-    storage = new ArtifactStorage({
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-      bucket: env.R2_BUCKET,
-      ...(env.R2_ACCOUNT_ID ? { accountId: env.R2_ACCOUNT_ID } : {}),
-      ...(env.R2_ENDPOINT ? { endpoint: env.R2_ENDPOINT } : {}),
-    });
-  }
-  return storage;
-}
 
 export const exportRoutes: FastifyPluginCallbackZod = (app, _opts, done) => {
   app.post(

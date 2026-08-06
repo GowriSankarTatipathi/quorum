@@ -84,9 +84,26 @@ describe('results sheet', () => {
     expect(bundle.results[0]?.value).toBe('not_present');
   });
 
-  it('adds a note to a claim the Critic flagged', () => {
-    const bundle = build([claim()], [], [critique()]);
-    expect(bundle.results[0]?.note).toContain('Flagged by the Critic');
+  it('names the critique in the note in severity order', () => {
+    const bundle = build([claim()], [], [
+      critique({ id: 'cr_1', severity: 'WARNING', kind: 'DUPLICATE', message: 'extracted more than once.' }),
+      critique({ id: 'cr_2', severity: 'BLOCKING', kind: 'UNIT_MISMATCH', message: 'units are not comparable.' }),
+    ]);
+    expect(bundle.results[0]?.note).toBe(
+      'UNIT_MISMATCH (blocking) — units are not comparable. See Findings. DUPLICATE (warning) — extracted more than once. See Findings.'
+    );
+  });
+
+  it('reserves visual emphasis for blocking critiques', () => {
+    const withWarning = build([claim()], [], [
+      critique({ severity: 'WARNING', kind: 'DUPLICATE', message: 'duplicate.' }),
+    ]);
+    expect(withWarning.results[0]?.needsReview).toBe(false);
+
+    const withBlocking = build([claim()], [], [
+      critique({ severity: 'BLOCKING', kind: 'UNIT_MISMATCH', message: 'mismatch.' }),
+    ]);
+    expect(withBlocking.results[0]?.needsReview).toBe(true);
   });
 
   it('adds a review note to a low-confidence claim', () => {

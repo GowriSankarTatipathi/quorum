@@ -53,7 +53,11 @@ export async function enqueueRunPlan(runId: string): Promise<void> {
 /** Enqueued after plan approval, and again on resume. The job id is per-attempt so a
  *  resumed run is a new job rather than a duplicate of a completed one. */
 export async function enqueueRunExecute(runId: string): Promise<void> {
-  await getRunQueue().add('run.execute', { runId }, { jobId: `exec-${runId}-${String(Date.now())}` });
+  await getRunQueue().add(
+    'run.execute',
+    { runId },
+    { jobId: `exec-${runId}-${String(Date.now())}` },
+  );
 }
 
 export async function enqueueExport(
@@ -76,4 +80,3 @@ export async function closeQueue(): Promise<void> {
   if (_exportQueue) promises.push(_exportQueue.close());
   await Promise.allSettled(promises);
 }
-

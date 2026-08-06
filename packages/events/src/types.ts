@@ -165,7 +165,12 @@ export interface RunEventPayloads extends Record<RunEventType, unknown> {
   'browser.screenshot': { key: string; url: string; width: number; height: number };
   'browser.dom.snapshot': { key: string; contentHash: string; nodeCount: number };
   'browser.noop_detected': { action: { type: string }; ref: number | null };
-  'browser.session.closed': { sessionId: string; durationMs: number; finalFrameUrl?: string; finalFrameKey?: string };
+  'browser.session.closed': {
+    sessionId: string;
+    durationMs: number;
+    finalFrameUrl?: string;
+    finalFrameKey?: string;
+  };
 
   'claim.created': {
     claimId: string;

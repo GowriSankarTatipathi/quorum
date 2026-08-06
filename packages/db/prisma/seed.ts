@@ -283,7 +283,9 @@ async function main(): Promise<void> {
   const claimCount = await prisma.claim.count({ where: { step: { runId: run.id } } });
   process.stdout.write(`  workspace ${org.slug}\n`);
   process.stdout.write(`  owner     ${owner.email}\n`);
-  process.stdout.write(`  run       ${run.id} (${String(claimCount)} claims, 1 blocking critique)\n`);
+  process.stdout.write(
+    `  run       ${run.id} (${String(claimCount)} claims, 1 blocking critique)\n`,
+  );
   process.stdout.write('seed complete.\n');
 }
 

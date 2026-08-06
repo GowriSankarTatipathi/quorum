@@ -24,6 +24,7 @@
     "@quorum/auth": "workspace:*",
     "@quorum/core": "workspace:*",
     "@quorum/db": "workspace:*",
+    "@quorum/env": "workspace:^",
     "@quorum/events": "workspace:*",
     "@quorum/storage": "workspace:*",
     "bullmq": "^5.34.6",

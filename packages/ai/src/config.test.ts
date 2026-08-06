@@ -42,8 +42,6 @@ describe('provider construction', () => {
     expect(Object.keys(providers)).toEqual(['anthropic']);
   });
 
-
-
   it('honours a base-url override, which is how the replica is pointed at', () => {
     const config = load({ ANTHROPIC_API_KEY: 'k', ANTHROPIC_BASE_URL: 'http://127.0.0.1:9999' });
     expect(config.anthropic?.baseUrl).toBe('http://127.0.0.1:9999');
@@ -65,7 +63,10 @@ describe('secret hygiene', () => {
 
 describe('overrides', () => {
   it('accepts per-agent model overrides so a deployment can retune without a deploy', () => {
-    const config = load({ ANTHROPIC_API_KEY: 'k', QUORUM_MODEL_CRITIC: 'claude-haiku-4-5-20251001' });
+    const config = load({
+      ANTHROPIC_API_KEY: 'k',
+      QUORUM_MODEL_CRITIC: 'claude-haiku-4-5-20251001',
+    });
     expect(config.modelOverrides.critic).toBe('claude-haiku-4-5-20251001');
   });
 

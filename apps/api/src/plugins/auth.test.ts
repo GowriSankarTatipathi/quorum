@@ -3,8 +3,6 @@ import { TrustLevel } from '@quorum/core';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 
-
-
 /**
  * These exercise the guards end-to-end through a real Fastify instance with real route
  * schemas — the layer where an authorisation mistake actually reaches a user. Handlers

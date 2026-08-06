@@ -211,7 +211,7 @@ export class PlaywrightDriver implements BrowserDriver {
   private locatorFor(live: LiveSession, ref: number) {
     const target = live.refs.get(ref);
     if (!target) throw new StaleRefError(ref);
-    
+
     // Playwright's accessible name calculation sometimes ignores CSS text-transform
     // (like capitalize) while CDP includes it, causing exact case-sensitive matches to fail.
     // Using a case-insensitive exact regex bridges the gap.
@@ -327,16 +327,19 @@ export class PlaywrightDriver implements BrowserDriver {
     });
   }
 
-  async streamScreencast(session: Session, onFrame: (buffer: Buffer) => void): Promise<() => Promise<void>> {
+  async streamScreencast(
+    session: Session,
+    onFrame: (buffer: Buffer) => void,
+  ): Promise<() => Promise<void>> {
     const live = this.live(session.id);
     const cdp = await live.context.newCDPSession(live.page);
     await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 50, everyNthFrame: 1 });
-    
+
     cdp.on('Page.screencastFrame', (event) => {
       onFrame(Buffer.from(event.data, 'base64'));
       void cdp.send('Page.screencastFrameAck', { sessionId: event.sessionId }).catch(() => {});
     });
-    
+
     return async () => {
       await cdp.send('Page.stopScreencast').catch(() => {});
       await cdp.detach().catch(() => {});

@@ -26,12 +26,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh bg-base text-fg antialiased" suppressHydrationWarning>
         <a
           href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-[var(--color-overlay)] focus:px-3 focus:py-2"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-[var(--color-overlay)] focus:px-3 focus:py-2"
         >
-        Skip to content
-      </a>
-      {children}
-    </body>
-    </html >
+          Skip to content
+        </a>
+        {children}
+      </body>
+    </html>
   );
 }

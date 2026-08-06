@@ -141,9 +141,17 @@ export class FixtureDriver implements BrowserDriver {
     );
   }
 
-  streamScreencast(_session: Session, onFrame: (buffer: Buffer) => void): Promise<() => Promise<void>> {
+  streamScreencast(
+    _session: Session,
+    onFrame: (buffer: Buffer) => void,
+  ): Promise<() => Promise<void>> {
     const timer = setInterval(() => {
-      onFrame(Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'));
+      onFrame(
+        Buffer.from(
+          '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==',
+          'base64',
+        ),
+      );
     }, 500);
     return Promise.resolve(() => {
       clearInterval(timer);

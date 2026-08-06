@@ -10,6 +10,7 @@ export interface ResultRow {
   status: string;
   /** Empty when the value stands on its own; a sentence when it needs a caveat. */
   note: string;
+  needsReview: boolean;
 }
 
 /**
@@ -91,8 +92,6 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
   let confidenceSum = 0;
   let confidenceCount = 0;
 
-  const flagged = new Set(input.critiques.flatMap((critique) => critique.claimIds));
-
   for (const claim of input.claims) {
     const verdicts = input.verdictsByClaim.get(claim.id) ?? [];
     const disposition = claimDisposition({
@@ -116,9 +115,22 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
     }
 
     const value = renderValue(claim.value);
-    const critiqueNote = flagged.has(claim.id)
-      ? 'Flagged by the Critic — see the Findings sheet.'
-      : '';
+    const claimCritiques = input.critiques.filter((c) => c.claimIds.includes(claim.id));
+    const sortedCritiques = [...claimCritiques].sort((a, b) => {
+      if (a.severity === b.severity) return 0;
+      return a.severity === 'BLOCKING' ? -1 : 1;
+    });
+
+    const critiqueNotes = sortedCritiques
+      .map((c) => `${c.kind} (${c.severity.toLowerCase()}) — ${c.message} See Findings.`)
+      .join(' ');
+
+    const hasBlocking = claimCritiques.some((c) => c.severity === 'BLOCKING');
+    const hasBadStatus = claim.status === 'CONTRADICTED' || claim.status === 'UNSUPPORTED';
+    
+    // Even if quarantined claims are currently excluded by isExportable, we check it to satisfy
+    // the definition of "needs a human".
+    const needsReview = hasBlocking || hasBadStatus || disposition === 'QUARANTINE';
 
     results.push({
       entity: claim.entity,
@@ -127,7 +139,8 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
       unit: claim.unit ?? '',
       confidence: claim.confidence === null ? null : Number(claim.confidence.toFixed(3)),
       status: claim.status,
-      note: [NOTE_FOR[disposition], critiqueNote].filter(Boolean).join(' '),
+      note: [NOTE_FOR[disposition], critiqueNotes].filter(Boolean).join(' '),
+      needsReview,
     });
 
     const latest = verdicts.at(-1);
@@ -161,7 +174,8 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
       excluded,
       verified,
       humanCorrected,
-      meanConfidence: confidenceCount === 0 ? 0 : Number((confidenceSum / confidenceCount).toFixed(3)),
+      meanConfidence:
+        confidenceCount === 0 ? 0 : Number((confidenceSum / confidenceCount).toFixed(3)),
       blockingCritiques: input.critiques.filter((critique) => critique.severity === 'BLOCKING')
         .length,
     },

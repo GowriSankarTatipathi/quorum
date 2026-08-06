@@ -12,10 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       {/* Grammarly and similar extensions inject data-gr-* attributes into body after
           the server HTML lands but before hydration. Not something the app can prevent,
           and scoped to this element only, so real mismatches inside still surface. */}
-      <body
-        className="min-h-dvh bg-white text-neutral-900 antialiased"
-        suppressHydrationWarning
-      >
+      <body className="min-h-dvh bg-white text-neutral-900 antialiased" suppressHydrationWarning>
         {children}
       </body>
     </html>

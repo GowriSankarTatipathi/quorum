@@ -1,12 +1,10 @@
 import { z } from 'zod';
 
-const EnvSchema = z.object({
+import { SharedEnvSchema } from '@quorum/env';
+
+const EnvSchema = SharedEnvSchema.extend({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-
-  DATABASE_URL: z.string().url(),
-  DIRECT_URL: z.string().url().optional(),
-  REDIS_URL: z.string().url(),
 
   /** Browser memory is the binding constraint: ~400 MB per Chromium context, so four
    *  fit a 2 GB machine with headroom. Every other scaling decision follows from this. */
@@ -29,15 +27,6 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
-
-  R2_ACCOUNT_ID: z.string().optional(),
-  R2_ACCESS_KEY_ID: z.string().optional(),
-  R2_SECRET_ACCESS_KEY: z.string().optional(),
-  R2_BUCKET: z.string().default('quorum-artifacts'),
-  R2_ENDPOINT: z.string().optional(),
-  ARTIFACT_BASE_URL: z.string().default('https://artifacts.quorum.app'),
-  ARTIFACT_ROOT: z.string().optional(),
-  ARTIFACT_SIGNING_SECRET: z.string().optional(),
 
   WORKER_HEARTBEAT_MS: z.coerce.number().int().positive().default(10_000),
 });

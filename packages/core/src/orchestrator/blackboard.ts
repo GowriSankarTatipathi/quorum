@@ -32,6 +32,7 @@ export interface Blackboard {
   recentActions: string[];
 
   claimIds: string[];
+  extractedFields: { entity: string; field: string }[];
   quarantinedCount: number;
 
   lastError: ClassifiedError | null;
@@ -77,6 +78,7 @@ export function createBlackboard(input: {
     lastContentHash: null,
     recentActions: [],
     claimIds: [],
+    extractedFields: [],
     quarantinedCount: 0,
     lastError: null,
     recoveryAttempts: [],

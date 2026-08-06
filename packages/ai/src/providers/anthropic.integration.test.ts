@@ -310,7 +310,7 @@ describe('error text classification', () => {
       status: 400,
       message: 'Worker local total request limit reached (32/32)',
     });
-    
+
     await expect(provider.complete(request())).rejects.toMatchObject({
       errorClass: 'RATE_LIMITED',
       status: 400,

@@ -4,16 +4,19 @@ import { formatUsd, price, priceMicroUsd, sumCosts } from './pricing.js';
 describe('priceMicroUsd', () => {
   it('prices input and output at their distinct rates', () => {
     // sonnet: $3/Mtok in, $15/Mtok out
-    expect(priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 1_000_000, outputTokens: 0 })).toBe(
-      3_000_000,
-    );
-    expect(priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 0, outputTokens: 1_000_000 })).toBe(
-      15_000_000,
-    );
+    expect(
+      priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 1_000_000, outputTokens: 0 }),
+    ).toBe(3_000_000);
+    expect(
+      priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 0, outputTokens: 1_000_000 }),
+    ).toBe(15_000_000);
   });
 
   it('discounts cached input tokens and does not double-charge them', () => {
-    const full = priceMicroUsd('claude-sonnet-4-5-20250929', { inputTokens: 100_000, outputTokens: 0 });
+    const full = priceMicroUsd('claude-sonnet-4-5-20250929', {
+      inputTokens: 100_000,
+      outputTokens: 0,
+    });
     const cached = priceMicroUsd('claude-sonnet-4-5-20250929', {
       inputTokens: 100_000,
       outputTokens: 0,

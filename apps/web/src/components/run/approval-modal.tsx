@@ -42,21 +42,24 @@ export function ApprovalModal({ runId }: { runId: string }) {
     );
   }, [approval]);
 
-  const decide = useCallback((decision: 'APPROVED' | 'REJECTED') => {
-    if (!approval) return;
-    setError(null);
-    startTransition(() => {
-      void decideApproval(
-        runId,
-        approval.approvalId,
-        decision,
-        Object.keys(payload).length > 0 ? payload : null,
-        scopeAll ? 'SIMILAR_IN_RUN' : 'SINGLE',
-      ).then((result) => {
-        if (!result.ok) setError(result.message);
+  const decide = useCallback(
+    (decision: 'APPROVED' | 'REJECTED') => {
+      if (!approval) return;
+      setError(null);
+      startTransition(() => {
+        void decideApproval(
+          runId,
+          approval.approvalId,
+          decision,
+          Object.keys(payload).length > 0 ? payload : null,
+          scopeAll ? 'SIMILAR_IN_RUN' : 'SINGLE',
+        ).then((result) => {
+          if (!result.ok) setError(result.message);
+        });
       });
-    });
-  }, [approval, runId, payload, scopeAll]);
+    },
+    [approval, runId, payload, scopeAll],
+  );
 
   useEffect(() => {
     if (!approval) return;

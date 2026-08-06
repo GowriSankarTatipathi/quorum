@@ -101,7 +101,10 @@ export interface BrowserDriver {
   snapshot(session: Session): Promise<PageSnapshot>;
   screenshot(session: Session, opts?: ShotOptions): Promise<Buffer>;
   capture(session: Session): Promise<PageCapture>;
-  streamScreencast(session: Session, onFrame: (buffer: Buffer) => void): Promise<() => Promise<void>>;
+  streamScreencast(
+    session: Session,
+    onFrame: (buffer: Buffer) => void,
+  ): Promise<() => Promise<void>>;
 
   liveViewUrl(session: Session): Promise<string | null>;
 

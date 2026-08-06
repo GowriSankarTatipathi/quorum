@@ -12,16 +12,16 @@ describe('turbo.json environment configuration', () => {
 
     // Find all process.env accesses in the codebase
     // Using git grep ensures we only search tracked files and respect ignores
-    const output = execSync(
-      'git grep -h -o "process.env\\.[A-Za-z0-9_]\\+" -- apps packages',
-      { cwd: rootDir, encoding: 'utf8' }
-    );
+    const output = execSync('git grep -h -o "process.env\\.[A-Za-z0-9_]\\+" -- apps packages', {
+      cwd: rootDir,
+      encoding: 'utf8',
+    });
 
     const accesses = new Set(
       output
         .split('\n')
         .filter(Boolean)
-        .map((match) => match.replace('process.env.', ''))
+        .map((match) => match.replace('process.env.', '')),
     );
 
     const missing: string[] = [];
@@ -40,6 +40,9 @@ describe('turbo.json environment configuration', () => {
       }
     }
 
-    expect(missing, `Variables read from process.env are missing from turbo.json globalEnv`).toEqual([]);
+    expect(
+      missing,
+      `Variables read from process.env are missing from turbo.json globalEnv`,
+    ).toEqual([]);
   });
 });

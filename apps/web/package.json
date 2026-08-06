@@ -19,6 +19,7 @@
     "@quorum/auth": "workspace:*",
     "@quorum/core": "workspace:*",
     "@quorum/db": "workspace:*",
+    "@quorum/env": "workspace:^",
     "@quorum/events": "workspace:*",
     "@quorum/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.4",

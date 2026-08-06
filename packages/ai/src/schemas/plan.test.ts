@@ -55,7 +55,9 @@ describe('PlanSchema', () => {
   });
 
   it('normalises known synonyms like "extraction" to "reasoning"', () => {
-    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['browser', 'extraction'] })] }));
+    const result = PlanSchema.safeParse(
+      plan({ steps: [step({ agentPath: ['browser', 'extraction'] })] }),
+    );
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.steps[0]?.agentPath).toEqual(['browser', 'reasoning']);
@@ -63,7 +65,9 @@ describe('PlanSchema', () => {
   });
 
   it('allows canonical values to pass untouched', () => {
-    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['browser', 'reasoning'] })] }));
+    const result = PlanSchema.safeParse(
+      plan({ steps: [step({ agentPath: ['browser', 'reasoning'] })] }),
+    );
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.steps[0]?.agentPath).toEqual(['browser', 'reasoning']);
@@ -71,7 +75,9 @@ describe('PlanSchema', () => {
   });
 
   it('rejects unknown synonyms like "summarizer"', () => {
-    const result = PlanSchema.safeParse(plan({ steps: [step({ agentPath: ['browser', 'summarizer'] })] }));
+    const result = PlanSchema.safeParse(
+      plan({ steps: [step({ agentPath: ['browser', 'summarizer'] })] }),
+    );
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toMatch(/Invalid enum value/);
@@ -81,15 +87,15 @@ describe('PlanSchema', () => {
   it('normalises a nested JSON-Schema-shaped outputSchema to flat strings', () => {
     const nestedSchema = {
       tiers: { type: 'array', items: { name: 'string', price: 'number' } },
-      metadata: { items: 'number', extra: 'string' }
+      metadata: { items: 'number', extra: 'string' },
     };
     const result = PlanSchema.safeParse(plan({ steps: [step({ outputSchema: nestedSchema })] }));
-    
+
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.steps[0]?.outputSchema).toEqual({
         tiers: 'array',
-        metadata: '{items,extra}'
+        metadata: '{items,extra}',
       });
     }
   });
@@ -97,7 +103,7 @@ describe('PlanSchema', () => {
   it('allows a flat outputSchema map to pass through untouched', () => {
     const flatSchema = { plan_name: 'string', price_per_user_monthly: 'number|null' };
     const result = PlanSchema.safeParse(plan({ steps: [step({ outputSchema: flatSchema })] }));
-    
+
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.steps[0]?.outputSchema).toEqual(flatSchema);

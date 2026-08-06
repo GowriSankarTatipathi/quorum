@@ -149,16 +149,21 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
           mode: run.mode,
           allowedHosts: board.allowedHosts,
           session,
-          budgetRemainingUsd: () => governor.remainingUsd({ ...board.budget, spentMicroUsd: spent }),
+          budgetRemainingUsd: () =>
+            governor.remainingUsd({ ...board.budget, spentMicroUsd: spent }),
         });
       } catch (error) {
         // We do not have LlmError directly imported here, but we can check name/properties,
         // or just consider standard errors. Actually we can import LlmError if needed, but
         // for now let's just check if it's explicitly transient.
         // If it's a known non-transient or a generic crash, fail the run cleanly.
-        const isTransient = error && typeof error === 'object' && 'transient' in error && error.transient === true;
+        const isTransient =
+          error && typeof error === 'object' && 'transient' in error && error.transient === true;
         if (isTransient) {
-          logger.warn({ runId, err: error }, 'Transient error during step execution, rethrowing for retry');
+          logger.warn(
+            { runId, err: error },
+            'Transient error during step execution, rethrowing for retry',
+          );
           throw error; // Let BullMQ retry
         }
 
@@ -166,8 +171,11 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
         await setStatus(runId, 'EXECUTING', 'FAILED');
         await eventPublisher.emit(
           'run.failed',
-          { code: 'E_AGENT_FAILED', humanMessage: error instanceof Error ? error.message : String(error) },
-          { runId }
+          {
+            code: 'E_AGENT_FAILED',
+            humanMessage: error instanceof Error ? error.message : String(error),
+          },
+          { runId },
         );
         return;
       }
@@ -237,17 +245,29 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
     await sessionPool.release(session.id);
     await eventPublisher.emit(
       'browser.session.closed',
-      { sessionId: session.id, durationMs: Date.now() - sessionStartedAt, finalFrameUrl, finalFrameKey },
+      {
+        sessionId: session.id,
+        durationMs: Date.now() - sessionStartedAt,
+        finalFrameUrl,
+        finalFrameKey,
+      },
       { runId, agent: 'browser' },
     );
     eventPublisher.release(runId);
 
     const currentRun = await runRepository.findById(runId);
-    if (currentRun && (currentRun.status === 'COMPLETED' || currentRun.status === 'FAILED' || currentRun.status === 'CANCELLED')) {
+    if (
+      currentRun &&
+      (currentRun.status === 'COMPLETED' ||
+        currentRun.status === 'FAILED' ||
+        currentRun.status === 'CANCELLED')
+    ) {
       if (hasStorage()) {
-        await getStorage().deletePrefix(`runs/${runId}/stream/`).catch((err) => {
-          logger.warn({ runId, err }, 'Failed to clean up stream frames');
-        });
+        await getStorage()
+          .deletePrefix(`runs/${runId}/stream/`)
+          .catch((err) => {
+            logger.warn({ runId, err }, 'Failed to clean up stream frames');
+          });
       }
     }
   }

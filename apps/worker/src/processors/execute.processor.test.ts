@@ -2,7 +2,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Job } from 'bullmq';
 import { processRunExecute, type ExecuteJobData } from './execute.processor.js';
-import { runRepository, stepRepository, claimRepository, eventRepository, type RunRecord, type StepRecord } from '@quorum/db';
+import {
+  runRepository,
+  stepRepository,
+  claimRepository,
+  eventRepository,
+  type RunRecord,
+  type StepRecord,
+} from '@quorum/db';
 
 import { browserDriver, sessionPool } from '../services/browser.js';
 import { getStorage, hasStorage } from '../services/storage.js';
@@ -30,7 +37,7 @@ vi.mock('@quorum/db', () => ({
   eventRepository: {
     append: vi.fn(),
     lastSeq: vi.fn(),
-  }
+  },
 }));
 
 vi.mock('../services/event-publisher.js', async (importOriginal) => {
@@ -160,7 +167,7 @@ describe('processRunExecute', () => {
     vi.mocked(executeStep).mockImplementation(async () => {
       // The stream loop waits 500ms per iteration. Wait 600ms to guarantee one frame is captured
       // before this step returns, which will eventually tear down the stream loop.
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 600));
       return { kind: 'done', claimCount: 0, quarantinedCount: 0 };
     });
 
@@ -172,8 +179,8 @@ describe('processRunExecute', () => {
 
     // Assert that a browser.screenshot event was emitted to redis
     const publishedEvents = vi.mocked(publisher.publish).mock.calls;
-    const screenshotEventStr = publishedEvents.find(
-      (call) => call[1].includes('"type":"browser.screenshot"')
+    const screenshotEventStr = publishedEvents.find((call) =>
+      call[1].includes('"type":"browser.screenshot"'),
     );
 
     expect(screenshotEventStr).toBeDefined();
@@ -184,9 +191,7 @@ describe('processRunExecute', () => {
 
     // Assert that no browser.screenshot event was written to the database
     const appendedEvents = vi.mocked(eventRepository.append).mock.calls;
-    const appendedScreenshot = appendedEvents.find(
-      (call) => call[0].type === 'browser.screenshot'
-    );
+    const appendedScreenshot = appendedEvents.find((call) => call[0].type === 'browser.screenshot');
     expect(appendedScreenshot).toBeUndefined();
   });
 
@@ -246,7 +251,13 @@ describe('processRunExecute', () => {
     vi.mocked(stepRepository.listForRun).mockResolvedValue([mockStep]);
     vi.mocked(claimRepository.verifiedRate).mockResolvedValue({ total: 0, verified: 0, rate: 0 });
 
-    const mockSession = { id: 'session_1', runId, driver: 'mock', createdAt: new Date().toISOString(), liveViewUrl: 'http://localhost/live' } as unknown as Session;
+    const mockSession = {
+      id: 'session_1',
+      runId,
+      driver: 'mock',
+      createdAt: new Date().toISOString(),
+      liveViewUrl: 'http://localhost/live',
+    } as unknown as Session;
     vi.mocked(sessionPool.acquire).mockResolvedValue(mockSession);
 
     const mockStorage: ArtifactStore = {
@@ -263,7 +274,11 @@ describe('processRunExecute', () => {
 
     vi.mocked(executeStep).mockImplementation(async () => {
       // Simulate taking a provenance screenshot by writing to storage directly
-      await mockStorage.put(`runs/${runId}/steps/step_1/shot-123.jpg`, Buffer.from('prov'), 'image/jpeg');
+      await mockStorage.put(
+        `runs/${runId}/steps/step_1/shot-123.jpg`,
+        Buffer.from('prov'),
+        'image/jpeg',
+      );
       return { kind: 'done', claimCount: 1, quarantinedCount: 0 };
     });
 
@@ -271,23 +286,25 @@ describe('processRunExecute', () => {
 
     // Verify stream cleanup happened
     expect(mockStorage.deletePrefix).toHaveBeenCalledWith(`runs/${runId}/stream/`);
-    
+
     // Verify no other deletes happened (provenance screenshots are untouched)
     const deletions = vi.mocked(mockStorage.deletePrefix).mock.calls;
     expect(deletions.length).toBe(1);
 
     // Verify final screenshot was taken
     const puts = vi.mocked(mockStorage.put).mock.calls;
-    const finalShot = puts.find(call => call[0].includes('/final-'));
+    const finalShot = puts.find((call) => call[0].includes('/final-'));
     expect(finalShot).toBeDefined();
 
     // Verify browser.session.closed event has finalFrameUrl
     const publishedEvents = vi.mocked(publisher.publish).mock.calls;
-    const sessionClosedStr = publishedEvents.find(
-      (call) => call[1].includes('"type":"browser.session.closed"')
+    const sessionClosedStr = publishedEvents.find((call) =>
+      call[1].includes('"type":"browser.session.closed"'),
     );
     expect(sessionClosedStr).toBeDefined();
-    const parsedClosed = JSON.parse(sessionClosedStr![1].toString()) as { payload: { finalFrameUrl: string } };
+    const parsedClosed = JSON.parse(sessionClosedStr![1].toString()) as {
+      payload: { finalFrameUrl: string };
+    };
     expect(parsedClosed.payload.finalFrameUrl).toBe('http://signed.url');
   });
 
@@ -295,13 +312,18 @@ describe('processRunExecute', () => {
     const runId = 'run_terminal_fail';
     const job = { data: { runId } } as unknown as Job<ExecuteJobData>;
 
-    const mockRun = { id: runId, status: 'AWAITING_APPROVAL', planHash: 'hash', orgId: 'org_1' } as RunRecord;
+    const mockRun = {
+      id: runId,
+      status: 'AWAITING_APPROVAL',
+      planHash: 'hash',
+      orgId: 'org_1',
+    } as RunRecord;
     vi.mocked(runRepository.findById).mockResolvedValue(mockRun);
-    
+
     const mockStep = { id: 'step_1', runId, status: 'PENDING' } as StepRecord;
     vi.mocked(stepRepository.listForRun).mockResolvedValue([mockStep]);
     vi.mocked(claimRepository.verifiedRate).mockResolvedValue({ total: 0, verified: 0, rate: 0 });
-    
+
     const mockSession = { id: 's_1' } as Session;
     vi.mocked(sessionPool.acquire).mockResolvedValue(mockSession);
     vi.mocked(hasStorage).mockReturnValue(false);
@@ -313,9 +335,9 @@ describe('processRunExecute', () => {
     await processRunExecute(job);
 
     expect(runRepository.setStatus).toHaveBeenCalledWith(runId, 'FAILED');
-    
+
     const publishedEvents = vi.mocked(publisher.publish).mock.calls;
-    const runFailedStr = publishedEvents.find(call => call[1].includes('"type":"run.failed"'));
+    const runFailedStr = publishedEvents.find((call) => call[1].includes('"type":"run.failed"'));
     expect(runFailedStr).toBeDefined();
   });
 });

@@ -23,9 +23,11 @@ import { env } from './env.js';
 import { logger } from './logger.js';
 import authPlugin from './plugins/auth.js';
 import errorHandler from './plugins/error-handler.js';
+import { getStorage, hasStorage } from './services/storage.js';
 import { redis } from './redis.js';
 import { controlRoutes } from './routes/control.js';
 import { exportRoutes } from './routes/exports.js';
+import { artifactRoutes } from './routes/artifacts.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { runRoutes } from './routes/runs.js';
@@ -137,6 +139,10 @@ export async function buildApp(): Promise<QuorumApp> {
 
   // ws.ts declares its own absolute path (/v1/ws), so it takes no prefix.
   registerWebsocket(app);
+
+  if (hasStorage() && getStorage().kind === 'filesystem') {
+    await app.register(artifactRoutes, { prefix: '/v1' });
+  }
 
   return app;
 }

@@ -19,6 +19,8 @@ export interface ReasoningAgentContext {
   capturedText: string;
   screenshotKey: string | null;
   domSnapshotKey: string | null;
+  /** Pairs already extracted in this run, to avoid duplicating them. */
+  knownFields: { entity: string; field: string; id: string }[];
 }
 
 export interface ReasoningResult {
@@ -50,6 +52,7 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
     stepObjective: ctx.stepObjective,
     outputSchema: ctx.outputSchema,
     url: ctx.url,
+    knownFields: ctx.knownFields,
     pageContent: ctx.pageContent,
   });
 
@@ -115,7 +118,23 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
     });
   }
 
-  const created = accepted.length > 0 ? await claimRepository.createMany(accepted) : [];
+  const created: ClaimRecord[] = [];
+  const knownMap = new Map(ctx.knownFields.map((f) => [`${f.entity}:${f.field}`, f.id]));
+
+  for (const claim of accepted) {
+    const existingId = knownMap.get(`${claim.entity}:${claim.field}`);
+    if (existingId) {
+      // It's a corroboration or update; append it by superseding the existing claim.
+      // Passing `null` for correctedBy signals this is a model-driven update.
+      const updated = await claimRepository.supersede(existingId, claim, null);
+      created.push(updated);
+      knownMap.set(`${claim.entity}:${claim.field}`, updated.id);
+    } else {
+      const added = await claimRepository.create(claim);
+      created.push(added);
+      knownMap.set(`${claim.entity}:${claim.field}`, added.id);
+    }
+  }
 
   for (const claim of created) {
     await eventPublisher.emit(

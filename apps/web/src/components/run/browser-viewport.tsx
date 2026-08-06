@@ -47,13 +47,18 @@ export function BrowserViewport({ onTakeover }: { onTakeover?: () => void }) {
               'size-1.5 rounded-full',
               connectionState === 'connected' && 'bg-[var(--color-verified)]',
               connectionState === 'connecting' && 'bg-[var(--color-review)]',
-              (connectionState === 'disconnected' || connectionState === 'auth_failed') && 'bg-[var(--color-failed)]',
+              (connectionState === 'disconnected' || connectionState === 'auth_failed') &&
+                'bg-[var(--color-failed)]',
               connectionState === 'idle' && 'bg-fg-muted',
             )}
           />
           {connectionState === 'auth_failed' ? (
             <span className="text-failed">
-              session expired (<Link href="/api/auth/signin" className="underline">sign in</Link>)
+              session expired (
+              <Link href="/api/auth/signin" className="underline">
+                sign in
+              </Link>
+              )
             </span>
           ) : connectionState === 'disconnected' ? (
             <span className="text-failed">

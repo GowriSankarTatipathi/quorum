@@ -56,7 +56,9 @@ const fail = (error: LlmError, times?: number): RecordedCompletion => ({
 });
 
 const transient = () =>
-  new LlmError('RATE_LIMITED', 'slow down', 'anthropic', 'claude-sonnet-4-5-20250929', { status: 429 });
+  new LlmError('RATE_LIMITED', 'slow down', 'anthropic', 'claude-sonnet-4-5-20250929', {
+    status: 429,
+  });
 const permanent = () =>
   new LlmError('AUTH', 'bad key', 'anthropic', 'claude-sonnet-4-5-20250929', { status: 401 });
 
@@ -95,29 +97,24 @@ describe('resolveCandidateModels', () => {
   it('an override replaces the primary model', () => {
     const resolved = resolveCandidateModels(
       { reasoning: 'claude-haiku-4-5-20251001' },
-      { fixture: dummyProvider }
+      { fixture: dummyProvider },
     );
     // Overridden primary disables the default fallback.
     expect(resolved.reasoning).toEqual(['claude-haiku-4-5-20251001']);
   });
 
-
-
   it('an empty candidate list raises at construction', () => {
     // If we have no providers, we have no candidates for reasoning.
-    expect(() =>
-      resolveCandidateModels(
-        { reasoning: 'claude-opus-4-5-20251101' },
-        {}
-      )
-    ).toThrow(/No models available for agent 'planner'/);
+    expect(() => resolveCandidateModels({ reasoning: 'claude-opus-4-5-20251101' }, {})).toThrow(
+      /No models available for agent 'planner'/,
+    );
   });
 
   it('de-duplicates models, preserving order', () => {
     // Override reasoning to 'claude-haiku-4-5-20251001' which is also its fallback
     const resolved = resolveCandidateModels(
       { reasoning: 'claude-haiku-4-5-20251001' },
-      { anthropic: dummyProvider }
+      { anthropic: dummyProvider },
     );
     expect(resolved.reasoning).toEqual(['claude-haiku-4-5-20251001']);
   });
@@ -294,7 +291,10 @@ describe('caching', () => {
 describe('provider configuration', () => {
   it('reports CONFIG (not AUTH) when no provider is configured for a model', async () => {
     // Deliberately passing invalid candidates (no provider) to test LlmRouter directly.
-    const router = new LlmRouter({ providers: {}, candidates: { reasoning: ['claude-sonnet-4-5-20250929'] } as Record<LlmAgentId, ModelId[]> });
+    const router = new LlmRouter({
+      providers: {},
+      candidates: { reasoning: ['claude-sonnet-4-5-20250929'] } as Record<LlmAgentId, ModelId[]>,
+    });
     try {
       await call(router);
       expect.unreachable('should have thrown');
@@ -345,7 +345,10 @@ describe('model overrides', () => {
       },
     };
     const providers = { anthropic: stub };
-    const candidates = resolveCandidateModels({ reasoning: 'claude-haiku-4-5-20251001' }, providers);
+    const candidates = resolveCandidateModels(
+      { reasoning: 'claude-haiku-4-5-20251001' },
+      providers,
+    );
     const router = new LlmRouter({ providers, candidates });
     const result = await call(router);
     expect(seen).toEqual(['claude-haiku-4-5-20251001']);
