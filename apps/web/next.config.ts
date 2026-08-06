@@ -1,9 +1,13 @@
 import type { NextConfig } from 'next';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Read at build time so the policy names the exact origins this deployment talks to.
 const apiOrigin = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 let wsOrigin = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:3001';
 const isDev = process.env.NODE_ENV !== 'production';
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(here, '..', '..');
 
 if (!isDev && wsOrigin.startsWith('ws://')) {
   wsOrigin = wsOrigin.replace('ws://', 'wss://');
@@ -11,6 +15,17 @@ if (!isDev && wsOrigin.startsWith('ws://')) {
 
 const config: NextConfig = {
   reactStrictMode: true,
+  // Prisma's query engine is a native .node binary. Next's bundler does not follow it, so
+  // the package is externalised and the generated client is traced explicitly. Without
+  // this the serverless function boots and then fails on the first query with
+  // "could not locate the Query Engine for runtime rhel-openssl-3.0.x".
+  serverExternalPackages: ['@prisma/client', '@quorum/db'],
+  // Next otherwise infers the workspace root from the nearest lockfile, which on this
+  // machine resolved to the home directory and broke tracing entirely.
+  outputFileTracingRoot: repoRoot,
+  outputFileTracingIncludes: {
+    '/**': ['../../packages/db/generated/client/**/*'],
+  },
   // Workspace packages ship TypeScript source rather than a build artifact: one fewer
   // build step, and a change in @quorum/ui is reflected in dev without a rebuild.
   transpilePackages: ['@quorum/ui', '@quorum/core', '@quorum/events'],
@@ -81,11 +96,11 @@ const config: NextConfig = {
           ...(isDev
             ? []
             : [
-                {
-                  key: 'Strict-Transport-Security',
-                  value: 'max-age=63072000; includeSubDomains; preload',
-                },
-              ]),
+              {
+                key: 'Strict-Transport-Security',
+                value: 'max-age=63072000; includeSubDomains; preload',
+              },
+            ]),
         ],
       },
     ];

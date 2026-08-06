@@ -1,5 +1,5 @@
 import type { ClaimStatus } from '@quorum/core';
-import { type Prisma } from '@prisma/client';
+import { type Prisma } from '../../generated/client/index.js';
 import { prisma } from '../client.js';
 import type { ClaimRecord, CreateClaimInput, CreateVerdictInput, VerdictRecord } from '../types.js';
 import { toClaim, toVerdict } from './runtime-mappers.js';

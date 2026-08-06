@@ -1,4 +1,4 @@
-import { type Prisma } from '@prisma/client';
+import { type Prisma } from '../../generated/client/index.js';
 import { prisma } from '../client.js';
 import type { AuthEventRecord, CreateAuthEventInput } from '../types.js';
 import { toAuthEvent } from './mappers.js';

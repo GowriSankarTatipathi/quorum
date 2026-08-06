@@ -1,4 +1,4 @@
-import { type Prisma } from '@prisma/client';
+import { type Prisma } from '../../generated/client/index.js';
 import { prisma } from '../client.js';
 import type { RecipeRecord } from '../types.js';
 import { toRecipe } from './runtime-mappers.js';

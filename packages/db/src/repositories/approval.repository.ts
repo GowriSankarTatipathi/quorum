@@ -1,4 +1,4 @@
-import { type Prisma } from '@prisma/client';
+import { type Prisma } from '../../generated/client/index.js';
 import { prisma } from '../client.js';
 import type { ApprovalRecord, ApprovalScope, CreateApprovalInput } from '../types.js';
 import { toApproval } from './runtime-mappers.js';

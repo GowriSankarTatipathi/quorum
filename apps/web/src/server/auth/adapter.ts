@@ -17,7 +17,7 @@ import type { Adapter, AdapterUser } from 'next-auth/adapters';
  * Invitations arrive with member management; until then every signup is its own tenant.
  */
 export function createQuorumAdapter(): Adapter {
-  const base = PrismaAdapter(prisma);
+  const base = PrismaAdapter(prisma as unknown as Parameters<typeof PrismaAdapter>[0]);
 
   return {
     ...base,

@@ -1,4 +1,4 @@
-app = "quorum-worker"
+app = "quorum-worker-gowri"
 primary_region = "iad"
 
 [build]

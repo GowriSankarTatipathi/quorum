@@ -1,4 +1,4 @@
-app = "quorum-api"
+app = "quorum-api-gowri"
 primary_region = "iad"
 
 [build]
