@@ -21,6 +21,7 @@
     "lint": "eslint src",
     "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json",
     "generate": "prisma generate",
+    "postinstall": "prisma generate",
     "migrate": "prisma migrate dev",
     "deploy": "prisma migrate deploy",
     "studio": "prisma studio",
