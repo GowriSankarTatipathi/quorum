@@ -19,8 +19,8 @@ export interface ReasoningAgentContext {
   capturedText: string;
   screenshotKey: string | null;
   domSnapshotKey: string | null;
-  /** Pairs already extracted in this run, to avoid duplicating them. */
-  knownFields: { entity: string; field: string; id: string }[];
+  /** All claims previously attempted/extracted in this run. */
+  existingClaims: { entity: string; field: string; id: string; value: unknown; status: string }[];
 }
 
 export interface ReasoningResult {
@@ -48,11 +48,17 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
 
   await eventPublisher.emit('agent.started', { agent: 'reasoning', stepIndex: null }, eventCtx);
 
+  // Only tell the model to skip fields that were successfully extracted.
+  // If it was just an attempt (null) or was rejected, we want it to try again.
+  const successfulFields = ctx.existingClaims.filter(
+    (c) => c.value !== null && c.status !== 'UNSUPPORTED' && c.status !== 'CONTRADICTED',
+  );
+
   const prompt = PROMPT_REGISTRY.reasoning.build({
     stepObjective: ctx.stepObjective,
     outputSchema: ctx.outputSchema,
     url: ctx.url,
-    knownFields: ctx.knownFields,
+    knownFields: successfulFields,
     pageContent: ctx.pageContent,
   });
 
@@ -119,7 +125,7 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
   }
 
   const created: ClaimRecord[] = [];
-  const knownMap = new Map(ctx.knownFields.map((f) => [`${f.entity}:${f.field}`, f.id]));
+  const knownMap = new Map(ctx.existingClaims.map((f) => [`${f.entity}:${f.field}`, f.id]));
 
   for (const claim of accepted) {
     const existingId = knownMap.get(`${claim.entity}:${claim.field}`);

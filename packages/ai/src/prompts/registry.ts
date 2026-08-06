@@ -14,7 +14,7 @@ import {
   REASONING_PROMPT_VERSION,
   buildReasoningPrompt,
   type ReasoningAgentInput,
-} from './reasoning.v4.js';
+} from './reasoning.v5.js';
 import {
   RECOVERY_PROMPT_VERSION,
   buildRecoveryPrompt,

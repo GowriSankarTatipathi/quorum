@@ -234,10 +234,12 @@ async function extractAndVerify(
   const capture = await browserDriver.capture(ctx.session);
 
   const currentClaims = await claimRepository.listCurrentForRun(ctx.runId);
-  const knownFields = currentClaims.map((c) => ({
+  const existingClaims = currentClaims.map((c) => ({
     entity: c.entity,
     field: c.field,
     id: c.id,
+    value: c.value,
+    status: c.status,
   }));
 
   const extraction = await runReasoningAgent({
@@ -253,7 +255,7 @@ async function extractAndVerify(
     capturedText: `${capture.a11y}\n${capture.html}`,
     screenshotKey: null,
     domSnapshotKey: null,
-    knownFields,
+    existingClaims,
   });
 
   await runVerificationAgent(extraction.claims, {

@@ -38,10 +38,11 @@ export function claimDisposition(
   // opinion can rehabilitate that.
   if (!input.grounded) return 'QUARANTINE';
 
+  if (input.status === 'SUPERSEDED') return 'QUARANTINE';
+
   if (input.confidence === null) return 'HUMAN_REVIEW';
 
   if (input.status === 'HUMAN_CORRECTED') return 'ACCEPT';
-  if (input.status === 'SUPERSEDED') return 'QUARANTINE';
 
   if (input.verdicts.some((v) => v.verdict === 'CONTRADICTED')) return 'HUMAN_REVIEW';
   if (input.verdicts.some((v) => v.verdict === 'UNSUPPORTED')) return 'QUARANTINE';

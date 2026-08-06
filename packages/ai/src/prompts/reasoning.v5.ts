@@ -6,7 +6,7 @@ import {
   UNCERTAINTY_CONTRACT,
 } from './shared/index.js';
 
-export const REASONING_PROMPT_VERSION = 'reasoning.v4';
+export const REASONING_PROMPT_VERSION = 'reasoning.v5';
 
 export interface ReasoningAgentInput {
   stepObjective: string;
@@ -27,10 +27,22 @@ export function buildReasoningPrompt(input: ReasoningAgentInput): {
     ? `<expected_fields>\n${JSON.stringify(input.outputSchema, null, 2)}\n</expected_fields>`
     : '<expected_fields>none declared — extract what the objective asks for</expected_fields>';
 
+  const groupedKnownFields = new Map<string, string[]>();
+  for (const f of input.knownFields) {
+    if (!groupedKnownFields.has(f.entity)) {
+      groupedKnownFields.set(f.entity, []);
+    }
+    groupedKnownFields.get(f.entity)!.push(f.field);
+  }
+
+  const knownFieldsLines = Array.from(groupedKnownFields.entries()).map(([entity, fields]) => {
+    return `- ${entity} (we have: ${fields.join(', ')})`;
+  });
+
   const knownFieldsBlock =
-    input.knownFields.length > 0
-      ? `<known_fields>\n${input.knownFields.map((f) => `- ${f.entity}: ${f.field}`).join('\n')}\n</known_fields>`
-      : '<known_fields>none</known_fields>';
+    knownFieldsLines.length > 0
+      ? `<already_extracted>\n${knownFieldsLines.join('\n')}\n</already_extracted>`
+      : '<already_extracted>none</already_extracted>';
 
   const system = `${IDENTITY}
 
@@ -61,8 +73,10 @@ Quote enough to be identifiable — "$12 /user/month", not "12".
    normalises, and it can only do that correctly if you did not round first.
 5. If the page contains none of the expected fields, return an empty claims array and
    explain in "note". An empty answer is a real answer.
-6. Do NOT extract any (entity, field) pair listed in <known_fields>. These were captured
-   in previous steps of this run and extracting them again creates duplicates.
+6. <already_extracted> lists the entities and fields we successfully captured in previous steps.
+   - Do NOT extract the specific fields we already have for these entities.
+   - You MUST extract any OTHER expected fields for these entities that we do not have yet (e.g., if we have 'plan_name' but not 'price', you must extract 'price').
+   - For any NEW entities not listed, extract ALL expected fields.
 </rules>
 
 ${DOMAIN_PRIORS}
