@@ -6,7 +6,7 @@ primary_region = "iad"
 
 [env]
   NODE_ENV = "production"
-  BROWSER_DRIVER = "browserbase"
+  BROWSER_DRIVER = "playwright"
   MAX_CONCURRENT_SESSIONS = "4"
 
 # Workers scale to zero. Browser work is the expensive component and demand is

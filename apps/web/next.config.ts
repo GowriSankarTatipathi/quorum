@@ -2,8 +2,12 @@ import type { NextConfig } from 'next';
 
 // Read at build time so the policy names the exact origins this deployment talks to.
 const apiOrigin = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const wsOrigin = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:3001';
+let wsOrigin = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:3001';
 const isDev = process.env.NODE_ENV !== 'production';
+
+if (!isDev && wsOrigin.startsWith('ws://')) {
+  wsOrigin = wsOrigin.replace('ws://', 'wss://');
+}
 
 const config: NextConfig = {
   reactStrictMode: true,

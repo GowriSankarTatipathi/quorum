@@ -2,8 +2,8 @@
 # The worker image carries Chromium, so it starts from the Playwright base image
 # rather than alpine: browser dependencies are notoriously hard to assemble by hand
 # and the pinned base guarantees the browser matches the driver version.
-FROM mcr.microsoft.com/playwright:v1.49.1-noble AS base
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+FROM mcr.microsoft.com/playwright:v1.62.1-noble AS base
+RUN npm install -g pnpm@9.15.9
 WORKDIR /app
 
 FROM base AS deps
@@ -14,6 +14,10 @@ COPY packages/events/package.json  packages/events/
 COPY packages/ai/package.json      packages/ai/
 COPY packages/browser/package.json packages/browser/
 COPY packages/db/package.json      packages/db/
+COPY packages/auth/package.json    packages/auth/
+COPY packages/env/package.json     packages/env/
+COPY packages/export/package.json  packages/export/
+COPY packages/storage/package.json packages/storage/
 COPY apps/worker/package.json      apps/worker/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @quorum/worker...
