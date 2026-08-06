@@ -62,6 +62,7 @@ fly apps create quorum-api
 fly secrets set --app quorum-api \
   DATABASE_URL=... REDIS_URL=... JWT_SECRET="$(openssl rand -base64 48)" \
   R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... \
+  R2_REGION=auto \
   WEB_ORIGIN=https://quorum.app
 fly deploy --config fly.api.toml
 ```
@@ -78,7 +79,8 @@ fly secrets set --app quorum-worker \
   DATABASE_URL=... REDIS_URL=... \
   ANTHROPIC_API_KEY=... OPENAI_API_KEY=... \
   BROWSERBASE_API_KEY=... BROWSERBASE_PROJECT_ID=... \
-  R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=...
+  R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... \
+  R2_REGION=auto
 fly deploy --config fly.worker.toml
 ```
 

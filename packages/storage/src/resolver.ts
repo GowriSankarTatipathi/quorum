@@ -7,6 +7,7 @@ export interface StorageConfigOptions {
   R2_SECRET_ACCESS_KEY?: string;
   R2_BUCKET?: string;
   R2_ACCOUNT_ID?: string;
+  R2_REGION?: string;
   R2_ENDPOINT?: string;
 
   ARTIFACT_ROOT?: string;
@@ -30,11 +31,13 @@ export function resolveStorage(env: StorageConfigOptions): ArtifactStore {
     if (!env.R2_BUCKET) {
       throw new StorageUnconfiguredError('R2_BUCKET is required when using R2');
     }
-    console.warn('[Storage] Using R2 object storage');
+    const region = env.R2_REGION ?? 'auto';
+    console.warn(`[Storage] Using R2 object storage (region: ${region})`);
     return new ArtifactStorage({
       accessKeyId: env.R2_ACCESS_KEY_ID,
       secretAccessKey: env.R2_SECRET_ACCESS_KEY,
       bucket: env.R2_BUCKET,
+      ...(env.R2_REGION ? { region: env.R2_REGION } : {}),
       ...(env.R2_ACCOUNT_ID ? { accountId: env.R2_ACCOUNT_ID } : {}),
       ...(env.R2_ENDPOINT ? { endpoint: env.R2_ENDPOINT } : {}),
     });

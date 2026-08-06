@@ -21,6 +21,7 @@ export const SharedEnvSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().default('quorum-artifacts'),
+  R2_REGION: z.string().optional(),
   R2_ENDPOINT: z.string().optional(),
   ARTIFACT_BASE_URL: z.string().default('https://artifacts.quorum.app'),
   ARTIFACT_ROOT: z.string().optional(),

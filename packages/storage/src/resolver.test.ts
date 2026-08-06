@@ -4,7 +4,7 @@ import { FilesystemStorage } from './filesystem.js';
 import { ArtifactStorage } from './storage.js';
 
 describe('resolveStorage', () => {
-  it('resolves to R2 when credentials are present', () => {
+  it('resolves to R2 when credentials are present', async () => {
     const store = resolveStorage({
       R2_ACCESS_KEY_ID: 'access',
       R2_SECRET_ACCESS_KEY: 'secret',
@@ -12,6 +12,22 @@ describe('resolveStorage', () => {
     });
     expect(store).toBeInstanceOf(ArtifactStorage);
     expect((store as ArtifactStorage).bucket).toBe('bucket');
+    
+    type ExposedClient = { client: { config: { region: () => Promise<string> } } };
+    await expect((store as unknown as ExposedClient).client.config.region()).resolves.toBe('auto');
+  });
+
+  it('passes R2_REGION to the S3 client when set', async () => {
+    const store = resolveStorage({
+      R2_ACCESS_KEY_ID: 'access',
+      R2_SECRET_ACCESS_KEY: 'secret',
+      R2_BUCKET: 'bucket',
+      R2_REGION: 'us-east-2',
+    });
+    expect(store).toBeInstanceOf(ArtifactStorage);
+    
+    type ExposedClient = { client: { config: { region: () => Promise<string> } } };
+    await expect((store as unknown as ExposedClient).client.config.region()).resolves.toBe('us-east-2');
   });
 
   it('resolves to FilesystemStorage when ARTIFACT_ROOT is set and R2 is absent', () => {
