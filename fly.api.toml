@@ -16,8 +16,7 @@ primary_region = "iad"
   # stream comes from Redis pub/sub — so it never scales to zero and needs no
   # sticky routing. Two machines give zero-downtime rolling deploys.
   auto_stop_machines = false
-  auto_start_machines = true
-  min_machines_running = 2
+  min_machines_running = 1
 
   [http_service.concurrency]
     type = "connections"
