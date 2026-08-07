@@ -24,6 +24,9 @@ const config: NextConfig = {
   // Next otherwise infers the workspace root from the nearest lockfile, which on this
   // machine resolved to the home directory and broke tracing entirely.
   outputFileTracingRoot: repoRoot,
+  outputFileTracingIncludes: {
+    '/**': ['../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/**/*'],
+  },
   // Workspace packages ship TypeScript source rather than a build artifact: one fewer
   // build step, and a change in @quorum/ui is reflected in dev without a rebuild.
   transpilePackages: ['@quorum/ui', '@quorum/core', '@quorum/events'],
