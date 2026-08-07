@@ -13,6 +13,23 @@ if (!isDev && wsOrigin.startsWith('ws://')) {
   wsOrigin = wsOrigin.replace('ws://', 'wss://');
 }
 
+/**
+ * Screenshot frames are uploaded to object storage and streamed to the client as presigned
+ * URLs, so the storage origin has to be in img-src. It is derived from the same endpoint
+ * the worker writes to rather than configured separately, because a policy that disagrees
+ * with the storage config fails in exactly one place — the live viewport — and the run
+ * itself still succeeds, so nothing else surfaces it.
+ */
+const artifactOrigin = (() => {
+  const raw = process.env.NEXT_PUBLIC_ARTIFACT_ORIGIN ?? process.env.R2_ENDPOINT ?? '';
+  if (!raw) return '';
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return '';
+  }
+})();
+
 const config: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
@@ -70,8 +87,9 @@ const config: NextConfig = {
       scriptSrc,
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
-      // Screenshot frames arrive as blobs and data urls from the event stream.
-      "img-src 'self' data: blob:",
+      // Frames arrive as presigned URLs on the artifact storage origin; data: and blob:
+      // remain for the fixture driver and for locally captured stills.
+      ["img-src 'self' data: blob:", artifactOrigin].filter(Boolean).join(' '),
       connectSrc,
       // Only the managed browser vendor may be framed, and only when configured.
       "frame-src 'self' https://*.browserbase.com",

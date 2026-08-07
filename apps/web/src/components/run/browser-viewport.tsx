@@ -31,7 +31,11 @@ export function BrowserViewport({ onTakeover }: { onTakeover?: () => void }) {
     <section
       aria-label="Live browser"
       className={cn(
-        'flex min-h-0 flex-col rounded-[var(--radius-panel)] border transition-colors',
+        // h-full is load-bearing: the parent is a block element, so without it this
+        // section is sized by its content and the frame area's flex-1 resolves to zero.
+        // The frames still download — they render into a box with no height, which looks
+        // exactly like a stream that never arrived.
+        'flex h-full min-h-0 flex-col rounded-[var(--radius-panel)] border transition-colors',
         takeover ? 'border-[var(--color-review)]' : 'border-hairline',
       )}
     >

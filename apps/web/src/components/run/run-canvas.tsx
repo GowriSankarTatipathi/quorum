@@ -3,7 +3,7 @@
 import { Button } from '@quorum/ui';
 import { Download, History, Loader2, Pause, Play, Square } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { elapsedSince, formatTokens, formatUsd } from '@/lib/format';
 import { useRunStream } from '@/hooks/use-run-stream';
 import { controlRun, getExportUrl, requestExport } from '@/server/runs/actions';
@@ -60,11 +60,15 @@ export function RunCanvas(props: RunCanvasProps) {
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Intentionally once per run id. `initialSteps` is a fresh array identity on every
+  // parent render, so listing it as a dependency re-seeded the store mid-run and threw
+  // away live state — the guard is the dependency, not the array.
+  const seededFor = useRef<string | null>(null);
   useEffect(() => {
+    if (seededFor.current === props.runId) return;
+    seededFor.current = props.runId;
     reset(props.runId);
     hydrateSteps(props.initialSteps);
-    // Intentionally run once per run id: the store is a projection of the stream, and
-    // re-seeding it on every render would discard live state.
   }, [props.runId, props.initialSteps, reset, hydrateSteps]);
 
   useRunStream(props.runId, props.accessToken);

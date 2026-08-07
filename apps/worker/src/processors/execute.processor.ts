@@ -90,7 +90,9 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
                 const key = `runs/${runId}/stream/${Date.now()}.jpg`;
                 const storage = getStorage();
                 await storage.put(key, buffer, 'image/jpeg');
-                const url = await storage.signedUrl(key, 600, 'screenshot.jpg');
+                // No download filename: that argument sets Content-Disposition: attachment,
+                // which is right for an export and wrong for a frame meant to render inline.
+                const url = await storage.signedUrl(key, 600);
                 await eventPublisher.emit(
                   'browser.screenshot',
                   { key, url, width: 1280, height: 800 },

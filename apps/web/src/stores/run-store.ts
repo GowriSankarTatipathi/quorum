@@ -518,7 +518,19 @@ export const useRunStore = create<RunStore>((set) => ({
   ...initial,
 
   reset: (runId) => {
-    set({ ...initial, runId, seenIds: new Set(), steps: new Map(), claims: new Map() });
+    set((state) => ({
+      ...initial,
+      runId,
+      seenIds: new Set(),
+      steps: new Map(),
+      claims: new Map(),
+      // The socket is not part of the run projection. Re-seeding the store must not
+      // report a live stream as idle, which is what made the viewport claim the run
+      // was not connected while frames were arriving.
+      connectionState: state.connectionState,
+      disconnectCode: state.disconnectCode,
+      disconnectReason: state.disconnectReason,
+    }));
   },
   setConnected: (connected) => {
     set({ connected });

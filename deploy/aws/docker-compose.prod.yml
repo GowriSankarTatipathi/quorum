@@ -17,6 +17,7 @@ services:
         # with empty strings and every fetch goes to the wrong origin.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+        NEXT_PUBLIC_ARTIFACT_ORIGIN: ${R2_ENDPOINT}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -32,6 +33,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+      NEXT_PUBLIC_ARTIFACT_ORIGIN: ${R2_ENDPOINT}
     expose:
       - '3000'
 

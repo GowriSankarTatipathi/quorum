@@ -25,10 +25,16 @@ FROM deps AS build
 # NEXT_PUBLIC_* are inlined into the client bundle at build time, so they must exist as
 # build args — Fly's [env] is runtime only and would arrive far too late, leaving the
 # API and WebSocket URLs undefined in the shipped JavaScript.
+#
+# The artifact origin is here for a second reason: Next resolves headers() at build time
+# into the routes manifest, so the Content-Security-Policy is frozen into the image. A
+# runtime variable cannot widen it later.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WS_URL
+ARG NEXT_PUBLIC_ARTIFACT_ORIGIN
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_ARTIFACT_ORIGIN=$NEXT_PUBLIC_ARTIFACT_ORIGIN
 COPY . .
 RUN pnpm --filter @quorum/db exec prisma generate \
     && pnpm --filter @quorum/web... build
