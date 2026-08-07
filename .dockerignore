@@ -1,7 +1,16 @@
-node_modules
-.git
-.next
-.turbo
-apps/web/.next
-apps/fixtures/.next
-dist
+# Docker matches these against the full path and does not recurse implicitly, so
+# every pattern needs **/ or it only ever excludes the copy at the repo root.
+#
+# The tsbuildinfo files matter as much as dist: `tsc -b` is incremental and trusts
+# them, so a stale one from the host makes it skip emitting entirely. Shipping
+# those without their dist output produced a build that resolved workspace imports
+# only because the host's dist happened to be in the context.
+**/node_modules
+**/.git
+**/.next
+**/.turbo
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example

@@ -1,0 +1,106 @@
+# QUORUM on a single EC2 box.
+#
+# Three application containers plus Caddy, which terminates TLS and routes by
+# hostname. Postgres, Redis and object storage stay off-box (Neon, Upstash,
+# Supabase) so this machine holds no state and can be rebuilt from the repo.
+#
+#   docker compose -f deploy/aws/docker-compose.prod.yml up -d --build
+#
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.web
+      args:
+        # Next inlines NEXT_PUBLIC_* at build time, so these must be present as
+        # build args and not only as runtime env, or the browser bundle ships
+        # with empty strings and every fetch goes to the wrong origin.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      AUTH_URL: ${AUTH_URL}
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: 'true'
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    expose:
+      - '3000'
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3001'
+      HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      ARTIFACT_SIGNING_SECRET: ${ARTIFACT_SIGNING_SECRET}
+      WEB_ORIGIN: ${AUTH_URL}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_REGION: ${R2_REGION}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+    expose:
+      - '3001'
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BROWSER_DRIVER: playwright
+      MAX_CONCURRENT_SESSIONS: '2'
+      VERIFICATION_SAMPLE_RATE: '1'
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ARTIFACT_SIGNING_SECRET: ${ARTIFACT_SIGNING_SECRET}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_REGION: ${R2_REGION}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+    # Chromium's renderer needs more than Docker's 64 MB default or tabs crash
+    # with SIGBUS partway through a page load.
+    shm_size: '1gb'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      WEB_HOST: ${WEB_HOST}
+      API_HOST: ${API_HOST}
+      ACME_EMAIL: ${ACME_EMAIL}
+    depends_on:
+      - web
+      - api
+
+volumes:
+  caddy-data:
+  caddy-config:

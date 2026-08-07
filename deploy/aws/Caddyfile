@@ -1,0 +1,25 @@
+# Caddy obtains and renews Let's Encrypt certificates automatically for both
+# hostnames. Nothing else in the stack needs to know about TLS.
+{
+	email {$ACME_EMAIL}
+}
+
+{$WEB_HOST} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+{$API_HOST} {
+	encode zstd gzip
+
+	# The run stream is a WebSocket at /v1/ws. Caddy forwards Upgrade headers by
+	# default, but the stream is long-lived and mostly idle between agent steps,
+	# so the read timeout has to be generous or the client sees a silent drop
+	# mid-run and reconnects with a gap in the timeline.
+	reverse_proxy api:3001 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+		}
+	}
+}

@@ -125,7 +125,9 @@ export function registerWebsocket(app: FastifyInstance): void {
       }
     })();
 
-    socket.on('close', (code, reason) => {
+    // Annotated explicitly: @fastify/websocket's socket is typed loosely enough that
+    // the close listener's parameters come through as implicit any under noImplicitAny.
+    socket.on('close', (code: number, reason: Buffer) => {
       void (async () => {
         try {
           app.log.info({ runId, code, reason: reason?.toString() }, 'ws connection closed');

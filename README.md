@@ -2,7 +2,7 @@
 
 **An autonomous browser agent that never acts alone.**
 
-**Live:** https://quorum-web-gowri.fly.dev · **Demo site the agent browses:** https://quorum-fixtures.vercel.app/pricing
+**Live:** https://quorum-gowri.duckdns.org · **Demo site the agent browses:** https://quorum-fixtures.vercel.app/pricing
 
 QUORUM turns a plain-English goal into a plan, executes it in a real browser through
 seven specialised agents, and hands back results you can trace to the exact pixel on
@@ -34,7 +34,7 @@ managed PostgreSQL, Redis and S3-compatible object storage.
 
 | | |
 | --- | --- |
-| Live | Web on Fly, API + worker on Fly, fixtures on Vercel |
+| Live | Web, API and worker on a single AWS EC2 instance behind Caddy; fixtures on Vercel |
 | Data | Neon PostgreSQL, Upstash Redis, Supabase S3-compatible storage |
 | Models | Claude Opus 4.5 (planner, critic), Sonnet 4.5 (browser, reasoning), Haiku 4.5 (verification) |
 | Verified journey | sign in → goal → plan → **approval gate** → browse → extract → ground → verify → critique → export |
@@ -229,19 +229,43 @@ Live topology:
 
 | Service | Where | Notes |
 | --- | --- | --- |
-| Web | Fly.io | Next.js standalone in Docker. Chosen over serverless because the app is WebSocket-heavy and the Prisma query engine is a native binary that serverless bundlers do not trace reliably. |
-| API | Fly.io | Fastify + WebSocket; needs long-lived connections |
-| Worker | Fly.io | 2 GB VM — Chromium will OOM below that |
+| Web | AWS EC2 (Docker) | Next.js standalone. Chosen over serverless because the app is WebSocket-heavy and the Prisma query engine is a native binary that serverless bundlers do not trace reliably. |
+| API | AWS EC2 (Docker) | Fastify + WebSocket; needs long-lived connections |
+| Worker | AWS EC2 (Docker) | Chromium OOMs below ~2 GB, and `shm_size` must be raised or the renderer dies mid-page |
+| TLS + routing | Caddy | Automatic Let's Encrypt for both hostnames; the API proxy holds the WebSocket open for an hour, since the run stream is idle between agent steps |
 | Fixtures | Vercel | Static demo site |
 | PostgreSQL | Neon | Pooled connection needs `?pgbouncer=true` for Prisma |
 | Redis | Upstash | `rediss://` (TLS); eviction must be `noeviction` for BullMQ |
 | Artifacts | Supabase S3 | Any S3-compatible endpoint; `R2_REGION` must be the real region, `auto` only works for Cloudflare R2 |
 
-Full runbook in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Two things worth knowing before
-you try it: `ARTIFACT_SIGNING_SECRET` and `JWT_SECRET` must be **identical** across
-services that sign and verify, and every deployment target needs its own Prisma
-`binaryTargets` entry — `rhel-openssl-3.0.x` for Vercel, `debian-openssl-3.0.x` for the
-Playwright image, `linux-musl-openssl-3.0.x` for Alpine.
+The whole application is three containers plus Caddy on one box, defined in
+[`deploy/aws/docker-compose.prod.yml`](deploy/aws/docker-compose.prod.yml). It holds no
+state — Postgres, Redis and object storage are all managed elsewhere — so the instance is
+disposable and rebuildable from the repo:
+
+```bash
+bash deploy/aws/bootstrap.sh                        # Docker + swap, once
+cp deploy/aws/env.example deploy/aws/.env           # then fill it in
+docker compose -f deploy/aws/docker-compose.prod.yml --env-file deploy/aws/.env up -d --build
+```
+
+Full runbook in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Three things worth knowing before
+you try it:
+
+- `ARTIFACT_SIGNING_SECRET` and `JWT_SECRET` must be **identical** across services that sign
+  and verify.
+- `NEXT_PUBLIC_*` are inlined by Next at build time, so they must be passed as Docker build
+  args and not only as runtime environment — otherwise the browser bundle ships with empty
+  strings and every request goes to the wrong origin.
+- Every deployment target needs its own Prisma `binaryTargets` entry —
+  `debian-openssl-3.0.x` for the Playwright image, `linux-musl-openssl-3.0.x` for Alpine,
+  `rhel-openssl-3.0.x` for serverless targets.
+
+`.dockerignore` patterns need a leading `**/`, because Docker matches them against the full
+path and does not recurse. A bare `dist` excluded only the repo root, so the host's built
+output was being copied into the build context — which in turn masked that `tsc -b` was
+skipping emit entirely on the strength of stale `.tsbuildinfo` files. The build looked
+reproducible and was not.
 
 ## Notable decisions
 
