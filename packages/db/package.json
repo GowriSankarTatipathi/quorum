@@ -13,7 +13,7 @@
   },
   "files": [
     "dist",
-    "generated"
+    "prisma"
   ],
   "scripts": {
     "build": "prisma generate && tsc -b tsconfig.build.json",
@@ -33,13 +33,13 @@
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
-    "@quorum/core": "workspace:*"
+    "@quorum/core": "workspace:*",
+    "prisma": "^6.2.1"
   },
   "devDependencies": {
     "@quorum/config": "workspace:*",
     "@types/node": "^22.10.5",
     "eslint": "^9.18.0",
-    "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"

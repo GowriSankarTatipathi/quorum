@@ -15,6 +15,7 @@ if (!isDev && wsOrigin.startsWith('ws://')) {
 
 const config: NextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   // Prisma's query engine is a native .node binary. Next's bundler does not follow it, so
   // the package is externalised and the generated client is traced explicitly. Without
   // this the serverless function boots and then fails on the first query with
@@ -23,9 +24,6 @@ const config: NextConfig = {
   // Next otherwise infers the workspace root from the nearest lockfile, which on this
   // machine resolved to the home directory and broke tracing entirely.
   outputFileTracingRoot: repoRoot,
-  outputFileTracingIncludes: {
-    '/**': ['../../packages/db/generated/client/**/*'],
-  },
   // Workspace packages ship TypeScript source rather than a build artifact: one fewer
   // build step, and a change in @quorum/ui is reflected in dev without a rebuild.
   transpilePackages: ['@quorum/ui', '@quorum/core', '@quorum/events'],

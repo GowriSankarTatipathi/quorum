@@ -1,4 +1,4 @@
-import { type Prisma } from '../../generated/client/index.js';
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import type { CreateCritiqueInput, CritiqueRecord, CritiqueResolution } from '../types.js';
 import { toCritique } from './runtime-mappers.js';

@@ -1,4 +1,4 @@
-import { PrismaClient } from '../generated/client/index.js';
+import { PrismaClient } from '@prisma/client';
 
 /**
  * A single PrismaClient per process, constructed lazily.

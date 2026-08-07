@@ -503,6 +503,9 @@ importers:
       '@quorum/core':
         specifier: workspace:*
         version: link:../core
+      prisma:
+        specifier: ^6.2.1
+        version: 6.19.3(typescript@5.9.3)
     devDependencies:
       '@quorum/config':
         specifier: workspace:*
@@ -513,9 +516,6 @@ importers:
       eslint:
         specifier: ^9.18.0
         version: 9.39.5(jiti@2.7.0)
-      prisma:
-        specifier: ^6.2.1
-        version: 6.19.3(typescript@5.9.3)
       tsx:
         specifier: ^4.19.2
         version: 4.23.4

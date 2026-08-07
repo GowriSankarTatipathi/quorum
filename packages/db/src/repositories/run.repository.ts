@@ -1,5 +1,5 @@
 import type { AutonomyMode, RunStatus } from '@quorum/core';
-import { type Prisma } from '../../generated/client/index.js';
+import { type Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import { decimalToMicroUsd, microUsdToDecimalString } from '../money.js';
 import type { CreateRunInput, RunCostBreakdown, RunRecord, RunSnapshot } from '../types.js';

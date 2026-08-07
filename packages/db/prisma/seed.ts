@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '../generated/client/index.js';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 /**
  * Deterministic development seed.

@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
+COPY packages/config/package.json  packages/config/
+COPY packages/core/package.json    packages/core/
+COPY packages/events/package.json  packages/events/
+COPY packages/ai/package.json      packages/ai/
+COPY packages/browser/package.json packages/browser/
+COPY packages/db/package.json      packages/db/
+COPY packages/db/prisma/schema.prisma packages/db/prisma/
+COPY packages/auth/package.json    packages/auth/
+COPY packages/env/package.json     packages/env/
+COPY packages/export/package.json  packages/export/
+COPY packages/storage/package.json packages/storage/
+COPY packages/ui/package.json      packages/ui/
+COPY apps/web/package.json         apps/web/
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @quorum/web...
+
+FROM deps AS build
+COPY . .
+RUN pnpm --filter @quorum/db exec prisma generate \
+ && pnpm --filter @quorum/web... build
+
+FROM base AS runtime
+ENV NODE_ENV=production
+RUN addgroup -S quorum && adduser -S quorum -G quorum
+
+# Copy Next.js standalone files
+COPY --from=build --chown=quorum:quorum /app/apps/web/.next/standalone /app/
+RUN mkdir -p /app/apps/web/public
+COPY --from=build --chown=quorum:quorum /app/apps/web/.next/static /app/apps/web/.next/static
+
+USER quorum
+EXPOSE 3000
+ENV HOSTNAME="0.0.0.0"
+ENV PORT=3000
+
+CMD ["node", "apps/web/server.js"]
