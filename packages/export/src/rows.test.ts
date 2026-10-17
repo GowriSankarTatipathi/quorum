@@ -85,24 +85,42 @@ describe('results sheet', () => {
   });
 
   it('names the critique in the note in severity order', () => {
-    const bundle = build([claim()], [], [
-      critique({ id: 'cr_1', severity: 'WARNING', kind: 'DUPLICATE', message: 'extracted more than once.' }),
-      critique({ id: 'cr_2', severity: 'BLOCKING', kind: 'UNIT_MISMATCH', message: 'units are not comparable.' }),
-    ]);
+    const bundle = build(
+      [claim()],
+      [],
+      [
+        critique({
+          id: 'cr_1',
+          severity: 'WARNING',
+          kind: 'DUPLICATE',
+          message: 'extracted more than once.',
+        }),
+        critique({
+          id: 'cr_2',
+          severity: 'BLOCKING',
+          kind: 'UNIT_MISMATCH',
+          message: 'units are not comparable.',
+        }),
+      ],
+    );
     expect(bundle.results[0]?.note).toBe(
-      'UNIT_MISMATCH (blocking) — units are not comparable. See Findings. DUPLICATE (warning) — extracted more than once. See Findings.'
+      'UNIT_MISMATCH (blocking) — units are not comparable. See Findings. DUPLICATE (warning) — extracted more than once. See Findings.',
     );
   });
 
   it('reserves visual emphasis for blocking critiques', () => {
-    const withWarning = build([claim()], [], [
-      critique({ severity: 'WARNING', kind: 'DUPLICATE', message: 'duplicate.' }),
-    ]);
+    const withWarning = build(
+      [claim()],
+      [],
+      [critique({ severity: 'WARNING', kind: 'DUPLICATE', message: 'duplicate.' })],
+    );
     expect(withWarning.results[0]?.needsReview).toBe(false);
 
-    const withBlocking = build([claim()], [], [
-      critique({ severity: 'BLOCKING', kind: 'UNIT_MISMATCH', message: 'mismatch.' }),
-    ]);
+    const withBlocking = build(
+      [claim()],
+      [],
+      [critique({ severity: 'BLOCKING', kind: 'UNIT_MISMATCH', message: 'mismatch.' })],
+    );
     expect(withBlocking.results[0]?.needsReview).toBe(true);
   });
 

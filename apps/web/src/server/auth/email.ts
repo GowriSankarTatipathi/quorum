@@ -50,7 +50,7 @@ export async function sendVerificationRequest(params: VerificationEmailParams): 
 
   // nodemailer reports rejected recipients as either a bare address or an address
   // object, so they are normalised before being read back to the caller.
-  const failed = [...result.rejected, ...result.pending].map((recipient) =>
+  const failed = [...result.rejected, ...(result.pending ?? [])].map((recipient) =>
     typeof recipient === 'string' ? recipient : recipient.address,
   );
   if (failed.length > 0) {

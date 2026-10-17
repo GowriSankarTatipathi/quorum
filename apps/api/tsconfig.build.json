@@ -8,6 +8,9 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../../packages/ai/tsconfig.build.json"
+    },
+    {
       "path": "../../packages/core/tsconfig.build.json"
     },
     {

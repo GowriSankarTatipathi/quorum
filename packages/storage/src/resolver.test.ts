@@ -12,7 +12,7 @@ describe('resolveStorage', () => {
     });
     expect(store).toBeInstanceOf(ArtifactStorage);
     expect((store as ArtifactStorage).bucket).toBe('bucket');
-    
+
     type ExposedClient = { client: { config: { region: () => Promise<string> } } };
     await expect((store as unknown as ExposedClient).client.config.region()).resolves.toBe('auto');
   });
@@ -25,9 +25,11 @@ describe('resolveStorage', () => {
       R2_REGION: 'us-east-2',
     });
     expect(store).toBeInstanceOf(ArtifactStorage);
-    
+
     type ExposedClient = { client: { config: { region: () => Promise<string> } } };
-    await expect((store as unknown as ExposedClient).client.config.region()).resolves.toBe('us-east-2');
+    await expect((store as unknown as ExposedClient).client.config.region()).resolves.toBe(
+      'us-east-2',
+    );
   });
 
   it('resolves to FilesystemStorage when ARTIFACT_ROOT is set and R2 is absent', () => {
@@ -49,7 +51,7 @@ describe('resolveStorage', () => {
       ARTIFACT_ROOT: '/tmp/artifacts',
       API_ORIGIN: 'http://api.local',
     });
-    
+
     const url = await store.signedUrl('test.jpg');
     expect(url).toMatch(/^http:\/\/api\.local\/v1\/artifacts\?/);
   });
@@ -61,7 +63,7 @@ describe('resolveStorage', () => {
       R2_BUCKET: 'bucket',
       R2_ENDPOINT: 'http://localhost:9000',
     });
-    
+
     const url = await store.signedUrl('test.jpg');
     expect(url).toMatch(/^http:\/\/localhost:9000\/bucket\/test\.jpg\?/);
   });

@@ -10,3 +10,6 @@ export * from './providers/index.js';
 export * from './prompts/index.js';
 export * from './schemas/plan.js';
 export * from './schemas/agents.js';
+export * from './rag/retrieval.js';
+export * from './rag/guardrails.js';
+export * from './rag/tools.js';

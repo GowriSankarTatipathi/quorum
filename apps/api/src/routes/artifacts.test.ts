@@ -35,30 +35,64 @@ vi.mock('ioredis', async () => {
   const { EventEmitter } = await import('node:events');
   class MockRedis extends EventEmitter {
     status = 'ready';
-    ping() { return Promise.resolve('PONG'); }
-    quit() { return Promise.resolve(); }
-    subscribe() { return Promise.resolve(); }
-    unsubscribe() { return Promise.resolve(); }
-    lpush() { return Promise.resolve(1); }
-    expire() { return Promise.resolve(1); }
-    get() { return Promise.resolve(null); }
-    set() { return Promise.resolve('OK'); }
-    del() { return Promise.resolve(1); }
-    incr() { return Promise.resolve(1); }
-    pttl() { return Promise.resolve(-1); }
+    ping() {
+      return Promise.resolve('PONG');
+    }
+    quit() {
+      return Promise.resolve();
+    }
+    subscribe() {
+      return Promise.resolve();
+    }
+    unsubscribe() {
+      return Promise.resolve();
+    }
+    lpush() {
+      return Promise.resolve(1);
+    }
+    expire() {
+      return Promise.resolve(1);
+    }
+    get() {
+      return Promise.resolve(null);
+    }
+    set() {
+      return Promise.resolve('OK');
+    }
+    del() {
+      return Promise.resolve(1);
+    }
+    incr() {
+      return Promise.resolve(1);
+    }
+    pttl() {
+      return Promise.resolve(-1);
+    }
     defineCommand() {}
-    rlflxFixed() { return Promise.resolve([0, 0]); }
-    rlflxSliding() { return Promise.resolve([0, 0]); }
-    call() { return Promise.resolve(null); }
-    disconnect() { return; }
+    rlflxFixed() {
+      return Promise.resolve([0, 0]);
+    }
+    rlflxSliding() {
+      return Promise.resolve([0, 0]);
+    }
+    call() {
+      return Promise.resolve(null);
+    }
+    disconnect() {
+      return;
+    }
   }
   return { Redis: MockRedis, default: MockRedis };
 });
 
 vi.mock('bullmq', () => {
   class MockQueue {
-    add() { return Promise.resolve(); }
-    close() { return Promise.resolve(); }
+    add() {
+      return Promise.resolve();
+    }
+    close() {
+      return Promise.resolve();
+    }
   }
   return { Queue: MockQueue };
 });
@@ -85,10 +119,10 @@ describe('GET /v1/artifacts', () => {
     await mkdir('/tmp/quorum-artifacts-test', { recursive: true });
     await writeFile(join('/tmp/quorum-artifacts-test', 'test.txt'), 'hello world');
     await writeFile(join('/tmp/quorum-artifacts-test', 'test.png'), 'fake-png-data');
-    
+
     app = await buildApp();
     await app.ready();
-    
+
     store = new FilesystemStorage({
       root: '/tmp/quorum-artifacts-test',
       publicBaseUrl: 'http://localhost:3001/v1/artifacts',
@@ -134,7 +168,7 @@ describe('GET /v1/artifacts', () => {
     const signedUrl = await store.signedUrl('test.txt', 3600);
     const url = new URL(signedUrl);
     url.searchParams.set('signature', 'invalid-signature-123');
-    
+
     const response = await app.inject({
       method: 'GET',
       url: `${url.pathname}${url.search}`,

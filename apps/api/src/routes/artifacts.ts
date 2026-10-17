@@ -81,7 +81,7 @@ export const artifactRoutes: FastifyPluginAsyncZod = (app) => {
       // 5. Determine Content-Type and Content-Disposition
       const ext = extname(filename ?? key).toLowerCase();
       const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
-      
+
       void reply.type(mimeType);
 
       if (filename) {

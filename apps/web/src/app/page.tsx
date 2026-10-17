@@ -23,6 +23,9 @@ export default function HomePage() {
             <Link href="/runs">Runs</Link>
           </Button>
           <Button variant="ghost" size="sm" asChild>
+            <Link href="/knowledge">Knowledge</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
             <Link href="/recipes">Recipes</Link>
           </Button>
           <Button variant="ghost" size="sm" asChild>
