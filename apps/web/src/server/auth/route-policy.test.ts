@@ -8,6 +8,7 @@ describe('requiresAuth', () => {
     for (const path of [
       '/account',
       '/account/security',
+      '/knowledge',
       '/runs',
       '/runs/abc',
       '/usage',

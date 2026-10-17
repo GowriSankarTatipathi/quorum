@@ -9,7 +9,13 @@
  */
 
 /** Routes that require a session. Everything else is public. */
-export const PROTECTED_PREFIXES = ['/account', '/runs', '/recipes', '/usage'] as const;
+export const PROTECTED_PREFIXES = [
+  '/account',
+  '/knowledge',
+  '/runs',
+  '/recipes',
+  '/usage',
+] as const;
 
 /** Signed-in users have no reason to see these, and bouncing them avoids a dead end. */
 export const AUTH_ROUTES = ['/signin', '/verify-request'] as const;

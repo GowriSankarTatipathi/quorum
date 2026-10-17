@@ -13,6 +13,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </Link>
         <nav aria-label="Main" className="flex items-center gap-1">
           <Button variant="ghost" size="sm" asChild>
+            <Link href="/knowledge">Knowledge</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
             <Link href="/account">Account</Link>
           </Button>
         </nav>

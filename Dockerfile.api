@@ -32,6 +32,7 @@ FROM base AS runtime
 ENV NODE_ENV=production
 RUN addgroup -S quorum && adduser -S quorum -G quorum
 COPY --from=build --chown=quorum:quorum /app/out /app
+COPY --from=build --chown=quorum:quorum /app/apps/api/knowledge-base /app/knowledge-base
 USER quorum
 EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \

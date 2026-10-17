@@ -59,6 +59,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.1
         version: 11.3.0
+      '@quorum/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@quorum/auth':
         specifier: workspace:*
         version: link:../../packages/auth

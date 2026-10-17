@@ -29,6 +29,7 @@ import { controlRoutes } from './routes/control.js';
 import { exportRoutes } from './routes/exports.js';
 import { artifactRoutes } from './routes/artifacts.js';
 import { healthRoutes } from './routes/health.js';
+import { knowledgeRoutes } from './routes/knowledge.js';
 import { meRoutes } from './routes/me.js';
 import { runRoutes } from './routes/runs.js';
 import { registerWebsocket } from './routes/ws.js';
@@ -133,6 +134,7 @@ export async function buildApp(): Promise<QuorumApp> {
   );
 
   await app.register(meRoutes, { prefix: '/v1' });
+  await app.register(knowledgeRoutes, { prefix: '/v1' });
   await app.register(runRoutes, { prefix: '/v1' });
   await app.register(controlRoutes, { prefix: '/v1' });
   await app.register(exportRoutes, { prefix: '/v1' });

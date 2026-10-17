@@ -152,6 +152,8 @@ const EXPECTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'PATCH', path: '/v1/org/policy' },
 
   // runs.ts (prefix /v1)
+  { method: 'POST', path: '/v1/knowledge/ask' },
+  { method: 'GET', path: '/v1/knowledge/sources' },
   { method: 'POST', path: '/v1/runs' },
   { method: 'GET', path: '/v1/runs' },
   { method: 'GET', path: '/v1/runs/{runId}' },

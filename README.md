@@ -52,7 +52,7 @@ not measured; there is no ECE test. The verifier's catch rate has not been measu
 against planted errors.
 
 Documentation: [architecture](docs/ARCHITECTURE.md) · [deployment](docs/DEPLOYMENT.md) ·
-[demo](docs/DEMO.md) · [troubleshooting](docs/TROUBLESHOOTING.md)
+[demo](docs/DEMO.md) · [troubleshooting](docs/TROUBLESHOOTING.md) · [RAG prototype](docs/RAG.md)
 
 ---
 
@@ -150,6 +150,10 @@ Go to http://localhost:3002/pricing and extract the plan name and the monthly pr
 The fixture defaults its billing toggle to **annual**. Watching the agent notice that and
 switch it to monthly before extracting is the behaviour the product exists to demonstrate.
 
+The signed-in app includes a documentation assistant at `/knowledge`. It retrieves from
+curated QUORUM product docs, uses allowlisted read-only search tools, validates source
+citations, and abstains when it cannot support an answer; see [the RAG guide](docs/RAG.md).
+
 ## End-to-end run
 
 One command stands up the dependencies and drives the entire pipeline against a real
@@ -208,7 +212,7 @@ apps/
 packages/
   core/       Domain: enums, branded ids, action vocabulary, Trust Ladder, disposition
   events/     The event taxonomy — the contract between worker, gateway, DB and UI
-  ai/         Model registry, per-agent routing policy, prompts, exact cost accounting
+  ai/         Model registry, prompts, BM25 retrieval, and exact cost accounting
   browser/    The BrowserDriver port every backend implements
   db/         Prisma schema, migrations, typed repositories
   storage/    Artifact store resolution: S3-compatible or filesystem
