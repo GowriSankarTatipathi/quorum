@@ -1,13 +1,14 @@
+import type * as QuorumAi from '@quorum/ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const provider = vi.hoisted(() => ({
   complete: vi.fn(),
-  mode: 'live' as 'live' | 'recorded',
+  mode: 'live',
   warn: vi.fn(),
 }));
 
 vi.mock('@quorum/ai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@quorum/ai')>();
+  const actual = await importOriginal<typeof QuorumAi>();
   return {
     ...actual,
     loadLlmConfig: () =>
