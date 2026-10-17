@@ -127,7 +127,7 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
 
     const hasBlocking = claimCritiques.some((c) => c.severity === 'BLOCKING');
     const hasBadStatus = claim.status === 'CONTRADICTED' || claim.status === 'UNSUPPORTED';
-    
+
     // Even if quarantined claims are currently excluded by isExportable, we check it to satisfy
     // the definition of "needs a human".
     const needsReview = hasBlocking || hasBadStatus || disposition === 'QUARANTINE';

@@ -32,13 +32,13 @@ _why_, so the code is readable without a design document open beside it.
 Deployed and verified end to end in production against live Claude, a real Chromium, a
 managed PostgreSQL, Redis and S3-compatible object storage.
 
-| | |
-| --- | --- |
-| Live | Web, API and worker on a single AWS EC2 instance behind Caddy; fixtures on Vercel |
-| Data | Neon PostgreSQL, Upstash Redis, Supabase S3-compatible storage |
-| Models | Claude Opus 4.5 (planner, critic), Sonnet 4.5 (browser, reasoning), Haiku 4.5 (verification) |
-| Verified journey | sign in → goal → plan → **approval gate** → browse → extract → ground → verify → critique → export |
-| Typecheck / lint / build | clean across 15 packages and apps |
+|                          |                                                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| Live                     | Web, API and worker on a single AWS EC2 instance behind Caddy; fixtures on Vercel                  |
+| Data                     | Neon PostgreSQL, Upstash Redis, Supabase S3-compatible storage                                     |
+| Models                   | Claude Opus 4.5 (planner, critic), Sonnet 4.5 (browser, reasoning), Haiku 4.5 (verification)       |
+| Verified journey         | sign in → goal → plan → **approval gate** → browse → extract → ground → verify → critique → export |
+| Typecheck / lint / build | clean across 15 packages and apps                                                                  |
 
 A representative production run against the fixture site: 8–15 claims, all plan names
 verified at 1.00 confidence, grounding discarding fabricated values, the verifier
@@ -132,14 +132,14 @@ pnpm db:seed                   # optional: a completed demo run to look at
 pnpm dev                       # all apps, in parallel
 ```
 
-| Target | URL | What it is |
-| --- | --- | --- |
-| Web | http://localhost:3000 | The product |
-| API | http://localhost:3001 | Fastify gateway |
-| API docs | http://localhost:3001/docs | OpenAPI UI, generated from the Zod route schemas |
+| Target   | URL                           | What it is                                                 |
+| -------- | ----------------------------- | ---------------------------------------------------------- |
+| Web      | http://localhost:3000         | The product                                                |
+| API      | http://localhost:3001         | Fastify gateway                                            |
+| API docs | http://localhost:3001/docs    | OpenAPI UI, generated from the Zod route schemas           |
 | Fixtures | http://localhost:3002/pricing | Deterministic page reproducing failures real sites exhibit |
-| Mailpit | http://localhost:8025 | Sign-in links land here |
-| Worker | — | BullMQ consumer; logs to stdout |
+| Mailpit  | http://localhost:8025         | Sign-in links land here                                    |
+| Worker   | —                             | BullMQ consumer; logs to stdout                            |
 
 A goal to try:
 
@@ -231,16 +231,16 @@ hops to solve a problem we do not have.
 
 Live topology:
 
-| Service | Where | Notes |
-| --- | --- | --- |
-| Web | AWS EC2 (Docker) | Next.js standalone. Chosen over serverless because the app is WebSocket-heavy and the Prisma query engine is a native binary that serverless bundlers do not trace reliably. |
-| API | AWS EC2 (Docker) | Fastify + WebSocket; needs long-lived connections |
-| Worker | AWS EC2 (Docker) | Chromium OOMs below ~2 GB, and `shm_size` must be raised or the renderer dies mid-page |
-| TLS + routing | Caddy | Automatic Let's Encrypt for both hostnames; the API proxy holds the WebSocket open for an hour, since the run stream is idle between agent steps |
-| Fixtures | Vercel | Static demo site |
-| PostgreSQL | Neon | Pooled connection needs `?pgbouncer=true` for Prisma |
-| Redis | Upstash | `rediss://` (TLS); eviction must be `noeviction` for BullMQ |
-| Artifacts | Supabase S3 | Any S3-compatible endpoint; `R2_REGION` must be the real region, `auto` only works for Cloudflare R2 |
+| Service       | Where            | Notes                                                                                                                                                                        |
+| ------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web           | AWS EC2 (Docker) | Next.js standalone. Chosen over serverless because the app is WebSocket-heavy and the Prisma query engine is a native binary that serverless bundlers do not trace reliably. |
+| API           | AWS EC2 (Docker) | Fastify + WebSocket; needs long-lived connections                                                                                                                            |
+| Worker        | AWS EC2 (Docker) | Chromium OOMs below ~2 GB, and `shm_size` must be raised or the renderer dies mid-page                                                                                       |
+| TLS + routing | Caddy            | Automatic Let's Encrypt for both hostnames; the API proxy holds the WebSocket open for an hour, since the run stream is idle between agent steps                             |
+| Fixtures      | Vercel           | Static demo site                                                                                                                                                             |
+| PostgreSQL    | Neon             | Pooled connection needs `?pgbouncer=true` for Prisma                                                                                                                         |
+| Redis         | Upstash          | `rediss://` (TLS); eviction must be `noeviction` for BullMQ                                                                                                                  |
+| Artifacts     | Supabase S3      | Any S3-compatible endpoint; `R2_REGION` must be the real region, `auto` only works for Cloudflare R2                                                                         |
 
 The whole application is three containers plus Caddy on one box, defined in
 [`deploy/aws/docker-compose.prod.yml`](deploy/aws/docker-compose.prod.yml). It holds no
