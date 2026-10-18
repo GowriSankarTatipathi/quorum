@@ -90,7 +90,7 @@ export const controlRoutes: FastifyPluginCallbackZod = (app, _opts, done) => {
         );
       }
 
-      await enqueueRunExecute(run.id);
+      await enqueueRunExecute(run.id, request.body.planHash);
       return reply.status(202).send({ status: 'EXECUTING' });
     },
   );

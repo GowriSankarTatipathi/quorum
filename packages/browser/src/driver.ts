@@ -72,6 +72,8 @@ export interface ShotOptions {
 }
 
 export interface PageCapture {
+  /** Rendered page text without accessibility refs/roles, for verbatim evidence quotes. */
+  text?: string;
   url: string;
   title: string;
   html: string;

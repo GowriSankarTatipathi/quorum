@@ -13,14 +13,23 @@ import {
   type BrowserAction,
   type ClassifiedError,
 } from '@quorum/core';
-import { claimRepository, stepRepository, undoFrameRepository, type StepRecord } from '@quorum/db';
+import {
+  artifactRepository,
+  claimRepository,
+  runRepository,
+  stepRepository,
+  undoFrameRepository,
+  type StepRecord,
+} from '@quorum/db';
 import { env } from '../env.js';
 import { logger } from '../logger.js';
+import { getStorage, hasStorage } from '../services/storage.js';
 import { browserDriver } from '../services/browser.js';
 import { eventPublisher, newCorrelation } from '../services/event-publisher.js';
 import { ApprovalTimeoutError, awaitApproval } from '../services/approval.js';
 import { runBrowserAgent } from './browser.js';
 import { runReasoningAgent } from './reasoning.js';
+import { findCoverageGaps, describeCoverageGaps } from './coverage.js';
 import { runVerificationAgent } from './verification.js';
 import { runRecoveryAgent, type RecoveryDecision } from './recovery.js';
 
@@ -232,6 +241,32 @@ async function extractAndVerify(
 ): Promise<StepOutcome> {
   const started = Date.now();
   const capture = await browserDriver.capture(ctx.session);
+  let screenshotKey: string | null = null;
+  let domSnapshotKey: string | null = null;
+  if (hasStorage()) {
+    const storage = getStorage();
+    const base = `runs/${ctx.runId}/steps/${step.id}/evidence-${Date.now()}`;
+    const screenshot = await storage.put(`${base}.jpg`, capture.screenshot, 'image/jpeg');
+    const dom = await storage.put(`${base}.html`, Buffer.from(capture.html), 'text/html');
+    await artifactRepository.recordMany([
+      {
+        runId: ctx.runId,
+        kind: 'SCREENSHOT',
+        r2Key: screenshot.key,
+        mime: 'image/jpeg',
+        bytes: screenshot.bytes,
+      },
+      {
+        runId: ctx.runId,
+        kind: 'DOM_SNAPSHOT',
+        r2Key: dom.key,
+        mime: 'text/html',
+        bytes: dom.bytes,
+      },
+    ]);
+    screenshotKey = screenshot.key;
+    domSnapshotKey = dom.key;
+  }
 
   const currentClaims = await claimRepository.listCurrentForRun(ctx.runId);
   const existingClaims = currentClaims.map((c) => ({
@@ -242,27 +277,65 @@ async function extractAndVerify(
     status: c.status,
   }));
 
-  const extraction = await runReasoningAgent({
+  const extractionContext = {
     runId: ctx.runId,
     stepId: step.id,
     correlationId,
     stepObjective: step.objective,
     outputSchema: step.outputSchema as Record<string, string> | null,
     url: snapshot.url,
-    pageContent: snapshot.tree,
+    pageContent: (capture.text ?? capture.a11y).slice(0, 16_000),
     // Grounding is checked against a wider capture than the model saw, so trimming the
     // tree for cost cannot make a genuinely-read value look fabricated.
-    capturedText: `${capture.a11y}\n${capture.html}`,
-    screenshotKey: null,
-    domSnapshotKey: null,
+    capturedText: `${capture.text ?? ''}\n${capture.a11y}\n${capture.html}`,
+    screenshotKey,
+    domSnapshotKey,
     existingClaims,
-  });
+  };
+  const extraction = await runReasoningAgent(extractionContext);
+  const gaps = findCoverageGaps(
+    extractionContext.outputSchema,
+    [...currentClaims.filter((claim) => claim.sourceUrl === snapshot.url), ...extraction.claims],
+    extraction.quarantined.map((claim) => claim.entity),
+  );
+  const repairTargets = [...gaps, ...extraction.quarantined];
+  // One repair at most, against the same capture and approved objective. Re-read spend:
+  // the initial extraction may have consumed the budget passed at the start of the step.
+  const currentRun = repairTargets.length ? await runRepository.findById(ctx.runId) : null;
+  const canRepair =
+    currentRun?.status === 'EXECUTING' &&
+    currentRun.spentMicroUsd < currentRun.budgetMicroUsd &&
+    (!currentRun.startedAt ||
+      Date.now() - currentRun.startedAt.getTime() < env.MAX_RUN_DURATION_MS);
+  if (repairTargets.length && canRepair) {
+    const repair = await runReasoningAgent({
+      ...extractionContext,
+      repairOnly: true,
+      stepObjective: `${step.objective}\nRepair only these missing or rejected fields from this same page: ${describeCoverageGaps(repairTargets)}. Copy contiguous source text verbatim. Do not repeat supported fields or invent unavailable values.`,
+      existingClaims: [...existingClaims, ...extraction.claims],
+    });
+    const repaired = new Set(
+      repair.claims.map((claim) => JSON.stringify([claim.entity, claim.field])),
+    );
+    extraction.claims = [
+      ...extraction.claims.filter(
+        (claim) => !repaired.has(JSON.stringify([claim.entity, claim.field])),
+      ),
+      ...repair.claims,
+    ];
+    extraction.quarantined = [
+      ...extraction.quarantined.filter(
+        (claim) => !repaired.has(JSON.stringify([claim.entity, claim.field])),
+      ),
+      ...repair.quarantined,
+    ];
+  }
 
   await runVerificationAgent(extraction.claims, {
     runId: ctx.runId,
     stepId: step.id,
     correlationId,
-    sourceRegion: snapshot.tree,
+    sourceRegion: (capture.text ?? capture.a11y).slice(0, 16_000),
     capturedAt: capture.capturedAt,
   });
 

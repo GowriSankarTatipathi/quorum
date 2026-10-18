@@ -89,7 +89,9 @@ const config: NextConfig = {
       "font-src 'self' data:",
       // Frames arrive as presigned URLs on the artifact storage origin; data: and blob:
       // remain for the fixture driver and for locally captured stills.
-      ["img-src 'self' data: blob:", artifactOrigin].filter(Boolean).join(' '),
+      ["img-src 'self' data: blob:", new URL(apiOrigin).origin, artifactOrigin]
+        .filter(Boolean)
+        .join(' '),
       connectSrc,
       // Only the managed browser vendor may be framed, and only when configured.
       "frame-src 'self' https://*.browserbase.com",

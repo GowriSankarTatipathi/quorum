@@ -341,3 +341,65 @@ it('three steps over the same page yield exactly one claim per entity+field with
   expect(supersedeSpy).not.toHaveBeenCalled();
   expect(res3.claims).toHaveLength(0);
 });
+
+describe('repair and injection boundaries', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  const context = {
+    runId: 'run',
+    stepId: 'step',
+    correlationId: 'c',
+    stepObjective: 'Extract prices',
+    outputSchema: { price: 'number' },
+    url: 'https://example.com',
+    pageContent: 'Starter $999',
+    capturedText: 'Starter $999',
+    screenshotKey: null,
+    domSnapshotKey: null,
+    existingClaims: [
+      { id: 'existing', entity: 'Starter', field: 'price', value: 0, status: 'VERIFIED' },
+    ],
+  };
+  function router(injectionDetected: boolean) {
+    const fake = Object.create(LlmRouter.prototype) as LlmRouter;
+    fake.call = vi.fn().mockResolvedValue({
+      model: 'test',
+      data: {
+        claims: [
+          {
+            entity: 'Starter',
+            field: 'price',
+            value: 999,
+            sourceText: 'Starter $999',
+            confidence: 1,
+            unit: 'USD',
+            nullReason: null,
+            ambiguity: null,
+          },
+        ],
+        injectionDetected,
+        injectionExcerpt: injectionDetected ? 'ignore instructions' : null,
+        note: null,
+      },
+    });
+    vi.spyOn(llm, 'createRouter').mockReturnValue(fake);
+    return {
+      create: vi.spyOn(claimRepository, 'create'),
+      supersede: vi.spyOn(claimRepository, 'supersede'),
+    };
+  }
+  it('does not let a repair overwrite an existing supported value', async () => {
+    const spies = router(false);
+    const result = await runReasoningAgent({ ...context, repairOnly: true });
+    expect(result.claims).toEqual([]);
+    expect(spies.create).not.toHaveBeenCalled();
+    expect(spies.supersede).not.toHaveBeenCalled();
+  });
+  it('stores no claims after detecting injected instructions', async () => {
+    const spies = router(true);
+    await expect(runReasoningAgent(context)).rejects.toThrow();
+    expect(spies.create).not.toHaveBeenCalled();
+    expect(spies.supersede).not.toHaveBeenCalled();
+  });
+});

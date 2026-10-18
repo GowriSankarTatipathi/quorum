@@ -1,5 +1,5 @@
 import type { AutonomyMode, RunStatus } from '@quorum/core';
-import { type Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../client.js';
 import { decimalToMicroUsd, microUsdToDecimalString } from '../money.js';
 import type { CreateRunInput, RunCostBreakdown, RunRecord, RunSnapshot } from '../types.js';
@@ -18,6 +18,33 @@ export const runRepository = {
       },
     });
     return toRun(row);
+  },
+
+  /** A stable request id makes retries atomic without a read-then-create race. */
+  async createOnce(input: CreateRunInput, id: string): Promise<RunRecord> {
+    try {
+      const row = await prisma.run.upsert({
+        where: { id },
+        update: { id },
+        create: {
+          id,
+          userId: input.userId,
+          orgId: input.orgId,
+          goal: input.goal,
+          mode: input.mode,
+          recipeId: input.recipeId ?? null,
+          budgetUsd: microUsdToDecimalString(input.budgetMicroUsd),
+        },
+      });
+      return toRun(row);
+    } catch (error) {
+      // Some Prisma execution paths implement upsert as read/create. The unique id
+      // still prevents a duplicate; return the concurrent winner to the retry.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return toRun(await prisma.run.findUniqueOrThrow({ where: { id } }));
+      }
+      throw error;
+    }
   },
 
   async findById(id: string): Promise<RunRecord | null> {

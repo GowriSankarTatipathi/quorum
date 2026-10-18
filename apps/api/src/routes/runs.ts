@@ -1,8 +1,12 @@
+import { createHash } from 'node:crypto';
 import { AUTONOMY_MODES, RUN_STATUSES, estimateRun } from '@quorum/core';
 import {
+  artifactRepository,
   claimRepository,
+  critiqueRepository,
   eventRepository,
   orgRepository,
+  llmCallRepository,
   runRepository,
   stepRepository,
   type RunRecord,
@@ -10,8 +14,14 @@ import {
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireAuth } from '../plugins/auth.js';
-import { notFound } from '../plugins/error-handler.js';
-import { enqueueRunPlan } from '../services/queue.js';
+import { ApiError, notFound } from '../plugins/error-handler.js';
+import { getStorage } from '../services/storage.js';
+import {
+  isPlanExecutionQueued,
+  enqueueRunPlan,
+  runQueuePosition,
+  workerAvailability,
+} from '../services/queue.js';
 
 const RunSummarySchema = z.object({
   id: z.string(),
@@ -55,6 +65,7 @@ const EventSchema = z.object({
 });
 
 const CreateRunBodySchema = z.object({
+  requestId: z.string().uuid().optional(),
   goal: z.string().min(12, 'Describe the task in a sentence or two.').max(4_000),
   mode: z.enum(AUTONOMY_MODES).default('BALANCED'),
   /** Optional override; clamped to the workspace ceiling server-side regardless. */
@@ -82,6 +93,184 @@ function toRunSummary(run: RunRecord) {
 }
 
 export const runRoutes: FastifyPluginCallbackZod = (app, _opts, done) => {
+  app.get('/runtime', { schema: { tags: ['runs'] } }, async () => workerAvailability());
+
+  app.get(
+    '/runs/:runId/report',
+    {
+      onRequest: app.requirePermission('run:read'),
+      schema: {
+        params: z.object({ runId: z.string() }),
+        tags: ['runs'],
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    async (request) => {
+      const identity = requireAuth(request);
+      const run = await runRepository.findByIdForOrg(request.params.runId, identity.org);
+      if (!run) throw notFound('Run');
+      const [claims, critiques, steps, availability, lastSeq, calls] = await Promise.all([
+        claimRepository.listCurrentForRun(run.id),
+        critiqueRepository.listForRun(run.id),
+        stepRepository.listForRun(run.id),
+        workerAvailability(),
+        eventRepository.lastSeq(run.id),
+        llmCallRepository.listForRun(run.id),
+      ]);
+      const recentEvents = await eventRepository.listAfter(
+        run.id,
+        Math.max(0, lastSeq - 2000),
+        2000,
+      );
+      const evidenceWarnings = recentEvents
+        .filter((e) => e.type === 'error.classified')
+        .flatMap((e) => {
+          const p = e.payload as { code?: string; humanMessage?: string };
+          return p.code === 'E_LLM_HALLUCINATION_SUSPECTED' && typeof p.humanMessage === 'string'
+            ? [p.humanMessage]
+            : [];
+        });
+      const last = await eventRepository.listAfter(run.id, Math.max(0, lastSeq - 1), 1);
+      let approvalQueued = false;
+      if (run.status === 'AWAITING_APPROVAL') {
+        try {
+          approvalQueued = await isPlanExecutionQueued(run.id, run.planHash);
+        } catch {
+          /* Availability is unknown. */
+        }
+      }
+      let queuePosition: number | null = null;
+      if (run.status === 'CREATED' || approvalQueued) {
+        try {
+          queuePosition = await runQueuePosition(run.id);
+        } catch {
+          /* Availability stays explicit. */
+        }
+      }
+      const openFindings = critiques.filter(
+        (c) => c.resolution === 'OPEN' || c.resolution === 'ACCEPTED',
+      );
+      const gaps = openFindings.filter((c) => c.kind === 'COVERAGE_GAP' && c.severity !== 'NOTE');
+      const disputed = claims.filter((c) => !['VERIFIED', 'HUMAN_CORRECTED'].includes(c.status));
+      return {
+        status: run.status,
+        usage: {
+          spentUsd: microToUsd(run.spentMicroUsd),
+          budgetUsd: microToUsd(run.budgetMicroUsd),
+          estimatedUsd: steps.some((step) => step.estimatedMicroUsd !== null)
+            ? microToUsd(steps.reduce((sum, step) => sum + (step.estimatedMicroUsd ?? 0), 0))
+            : null,
+          calls: calls.length,
+          agents: [...new Set(calls.map((call) => call.agent))].map((agent) => ({
+            agent,
+            calls: calls.filter((call) => call.agent === agent).length,
+            spentUsd: microToUsd(
+              calls
+                .filter((call) => call.agent === agent)
+                .reduce((sum, call) => sum + call.costMicroUsd, 0),
+            ),
+          })),
+        },
+        evidenceWarnings,
+        finishedAt: run.endedAt?.toISOString() ?? null,
+        availability,
+        queuePosition,
+        approvalQueued,
+        lastActivityAt: last[0]?.ts.toISOString() ?? run.createdAt.toISOString(),
+        outcome:
+          run.status !== 'COMPLETED'
+            ? null
+            : !claims.length || gaps.length || steps.some((s) => s.status === 'SKIPPED')
+              ? 'incomplete'
+              : disputed.length || openFindings.some((c) => c.severity !== 'NOTE')
+                ? 'review'
+                : 'finished',
+        findings: openFindings.map((c) => ({
+          id: c.id,
+          kind: c.kind,
+          severity: c.severity,
+          message: c.message,
+          claimIds: c.claimIds,
+        })),
+        skippedSteps: steps.filter((s) => s.status === 'SKIPPED').map((s) => s.objective),
+        claims: await Promise.all(
+          claims.map(async (c) => {
+            const verdicts = await claimRepository.listVerdicts(c.id);
+            const verdict = verdicts.at(-1);
+            return {
+              id: c.id,
+              entity: c.entity,
+              field: c.field,
+              value: c.value,
+              unit: c.unit,
+              status: c.status,
+              confidence: c.confidence,
+              sourceUrl: c.sourceUrl,
+              sourceText: c.sourceText,
+              capturedAt: c.extractedAt.toISOString(),
+              nullReason: c.nullReason,
+              screenshotUrl: c.screenshotKey
+                ? await getStorage().signedUrl(c.screenshotKey, 900)
+                : null,
+              rationale: verdict?.rationale ?? null,
+              independentReading: verdict?.independentReading ?? null,
+            };
+          }),
+        ),
+      };
+    },
+  );
+
+  app.get(
+    '/runs/:runId/screenshots',
+    {
+      onRequest: app.requirePermission('run:read'),
+      schema: {
+        params: z.object({ runId: z.string() }),
+        tags: ['runs'],
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    async (request) => {
+      const claims = requireAuth(request);
+      const run = await runRepository.findByIdForOrg(request.params.runId, claims.org);
+      if (!run) throw notFound('Run');
+      const artifacts = await artifactRepository.listForRun(run.id, 'SCREENSHOT');
+      const shots = artifacts.map((a) => ({
+        key: a.r2Key,
+        capturedAt: a.createdAt.toISOString(),
+        label: 'Extraction evidence',
+      }));
+      // Older runs retained a final frame in their closing event, without an artifact row.
+      let cursor = 0;
+      for (;;) {
+        const events = await eventRepository.listAfter(run.id, cursor, 1000);
+        for (const event of events) {
+          if (event.type !== 'browser.session.closed') continue;
+          const payload = event.payload as { finalFrameKey?: unknown };
+          if (
+            typeof payload.finalFrameKey === 'string' &&
+            payload.finalFrameKey.startsWith(`runs/${run.id}/`)
+          ) {
+            shots.push({
+              key: payload.finalFrameKey,
+              capturedAt: event.ts.toISOString(),
+              label: 'Final browser view',
+            });
+          }
+        }
+        if (events.length < 1000) break;
+        cursor = events.at(-1)!.seq;
+      }
+      const storage = shots.length ? getStorage() : null;
+      return {
+        screenshots: await Promise.all(
+          shots.map(async (shot) => ({ ...shot, url: await storage!.signedUrl(shot.key, 900) })),
+        ),
+      };
+    },
+  );
+
   app.post(
     '/runs',
     {
@@ -104,17 +293,35 @@ export const runRoutes: FastifyPluginCallbackZod = (app, _opts, done) => {
       const requestedUsd = request.body.budgetUsd ?? Math.min(0.5, org.maxRunBudgetUsd);
       const budgetUsd = Math.min(requestedUsd, org.maxRunBudgetUsd);
 
-      const run = await runRepository.create({
+      const input = {
         userId: claims.sub,
         orgId: claims.org,
         goal: request.body.goal,
         mode: request.body.mode,
         budgetMicroUsd: Math.round(budgetUsd * 1_000_000),
         recipeId: request.body.recipeId ?? null,
-      });
+      };
+      const run = request.body.requestId
+        ? await runRepository.createOnce(
+            input,
+            `request_${createHash('sha256').update(`${claims.org}:${claims.sub}:${request.body.requestId}`).digest('hex')}`,
+          )
+        : await runRepository.create(input);
+      if (
+        run.goal !== input.goal ||
+        run.mode !== input.mode ||
+        run.budgetMicroUsd !== input.budgetMicroUsd ||
+        run.recipeId !== input.recipeId
+      ) {
+        throw new ApiError(
+          409,
+          'E_REQUEST_REUSED',
+          'This submission was already used for a different task. Submit a new task.',
+        );
+      }
 
       // Enqueued only after the row exists, so a worker can never claim a run it cannot read.
-      await enqueueRunPlan(run.id);
+      if (run.status === 'CREATED') await enqueueRunPlan(run.id);
 
       return reply.status(202).send(toRunSummary(run));
     },

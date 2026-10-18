@@ -295,6 +295,7 @@ describe('processRunExecute', () => {
     const puts = vi.mocked(mockStorage.put).mock.calls;
     const finalShot = puts.find((call) => call[0].includes('/final-'));
     expect(finalShot).toBeDefined();
+    expect(mockStorage.signedUrl).toHaveBeenCalledWith(finalShot![0], 604800);
 
     // Verify browser.session.closed event has finalFrameUrl
     const publishedEvents = vi.mocked(publisher.publish).mock.calls;

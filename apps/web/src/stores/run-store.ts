@@ -1,4 +1,4 @@
-import type { AgentId, RunStatus } from '@quorum/core';
+import type { AgentId, ClaimStatus, RunStatus } from '@quorum/core';
 import { TRANSIENT_EVENTS } from '@quorum/events';
 import { create } from 'zustand';
 
@@ -34,10 +34,10 @@ export interface ClaimView {
   field: string;
   value: unknown;
   unit: string | null;
-  confidence: number;
+  confidence: number | null;
   sourceUrl: string;
-  status: 'UNVERIFIED' | 'VERIFIED' | 'CONTRADICTED' | 'SUPERSEDED';
-  independentReading?: boolean;
+  status: ClaimStatus;
+  independentReading?: unknown;
 }
 
 export interface CritiqueView {
@@ -414,10 +414,13 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
       break;
     }
     case 'claim.contradicted': {
-      const p = payloadOf<{ claimId: string }>(event);
+      const p = payloadOf<{ claimId: string; verdict?: ClaimStatus; independentReading?: unknown }>(
+        event,
+      );
       next.claims = withClaim(next.claims, p.claimId, (claim) => ({
         ...claim,
-        status: 'CONTRADICTED',
+        status: p.verdict ?? 'CONTRADICTED',
+        independentReading: p.independentReading,
       }));
       break;
     }

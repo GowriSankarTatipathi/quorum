@@ -21,3 +21,30 @@
 
 @source "../../../../packages/ui/src";
 @source "../";
+
+/* Readable secondary text and visible keyboard focus across product flows. */
+:root {
+  --text-secondary: #4b5563;
+  --text-tertiary: #596579;
+}
+.dark {
+  --text-secondary: #b5b9c4;
+  --text-tertiary: #a0a6b3;
+  --accent-action: #3b6fd4;
+}
+:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--surface-base);
+}

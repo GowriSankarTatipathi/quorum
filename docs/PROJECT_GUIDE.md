@@ -1,0 +1,682 @@
+# QUORUM: Complete Project Guide
+
+**Repository snapshot:** 18 October 2026
+
+**Scope:** Current local implementation, including uncommitted improvements in the recovery worktree.
+
+**Audience:** Product owners, developers, reviewers, and demo presenters.
+
+This guide describes the code in this repository. It does not certify a production deployment or guarantee model accuracy. Future work is explicitly marked **proposed**. Secret values are intentionally excluded.
+
+## Contents
+
+1. [What QUORUM does](#1-what-quorum-does)
+2. [Implemented versus proposed](#2-implemented-versus-proposed)
+3. [System architecture](#3-system-architecture)
+4. [Technology and tool inventory](#4-technology-and-tool-inventory)
+5. [Repository map](#5-repository-map)
+6. [Research workflow](#6-research-workflow)
+7. [Agents and model routing](#7-agents-and-model-routing)
+8. [Browser automation](#8-browser-automation)
+9. [Claims, evidence, and quality](#9-claims-evidence-and-quality)
+10. [Current documentation RAG](#10-current-documentation-rag)
+11. [Proposed research RAG](#11-proposed-research-rag)
+12. [Storage and database](#12-storage-and-database)
+13. [Authentication and permissions](#13-authentication-and-permissions)
+14. [UI and API reference](#14-ui-and-api-reference)
+15. [Local setup](#15-local-setup)
+16. [Configuration](#16-configuration)
+17. [Testing and evaluation](#17-testing-and-evaluation)
+18. [Deployment and operations](#18-deployment-and-operations)
+19. [Troubleshooting](#19-troubleshooting)
+20. [Limitations and next milestones](#20-limitations-and-next-milestones)
+21. [Glossary and source map](#21-glossary-and-source-map)
+
+## 1. What QUORUM does
+
+QUORUM turns a research instruction into browser work and evidence-backed results. The user describes a task, reviews a proposed plan, approves execution, and receives extracted facts with source information and verification findings.
+
+A representative task is:
+
+> Open http://localhost:3002/pricing and switch billing to monthly. Extract every plan's name, displayed monthly price, seat basis, and complete feature list. Preserve Custom pricing without inventing a number. Include source quotes and screenshot evidence. Check missing fields, duplicates, and mixed billing periods. Prepare results for export.
+
+The product is useful for tasks such as pricing research and comparisons where a plain answer is insufficient: users need to inspect the original evidence and identify uncertain information. It is not a guarantee that a website was exhaustively researched or that every extracted value is correct.
+
+QUORUM currently has two distinct experiences:
+
+- **Research tasks:** agents browse approved sites, extract claims, verify them, and prepare results for export.
+- **Documentation Q&A:** a small RAG assistant answers questions about QUORUM's own curated documentation. It does not browse or execute research tasks.
+
+## 2. Implemented versus proposed
+
+| Capability                                                                | Current status                                              |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Authenticated web app, task history, plan approval                        | Implemented                                                 |
+| Local Chromium browsing through Playwright                                | Implemented and exercised locally                           |
+| Claim extraction, deterministic grounding, model verification, critic     | Implemented; quality still requires evaluation              |
+| Conditional recovery and one bounded extraction repair                    | Implemented; recovery is not guaranteed to succeed          |
+| Events, live browser frames, replay, evidence gallery                     | Implemented; historic runs may lack per-claim screenshots   |
+| XLSX, CSV, JSON export processing                                         | Implemented                                                 |
+| Documentation RAG using five Markdown documents and BM25                  | Implemented                                                 |
+| Embeddings or a vector database                                           | **Not implemented**                                         |
+| “Ask about this run” using stored research evidence                       | **Proposed**                                                |
+| Cross-run semantic search and document-upload RAG                         | **Proposed**                                                |
+| MCP server for the assistant                                              | **Not implemented**; knowledge tools are internal functions |
+| Browserbase managed-browser driver                                        | Present, but not established as live-validated in this work |
+| Dedicated formatter model invoked for every spreadsheet                   | **No**; exports are generated by application code           |
+| Production reliability, accuracy, or confidence calibration certification | **Not established**                                         |
+
+The database includes concepts such as recipes and share links. Their presence in the schema does not mean a complete user-facing feature exists. Unimplemented Recipes/Usage navigation was removed rather than presented as working functionality.
+
+## 3. System architecture
+
+```mermaid
+flowchart TD
+    U[User] --> W[Next.js web app]
+    W --> A[Fastify API]
+    W --> AUTH[Auth.js authentication]
+    AUTH --> DB[(PostgreSQL / Prisma)]
+    A --> DB
+    A --> Q[(Redis / BullMQ)]
+    Q --> WK[Worker]
+    WK --> B[Playwright / Chromium]
+    WK --> L[Anthropic models]
+    WK --> DB
+    WK --> S[Artifact storage]
+    WK --> E[Redis event delivery]
+    E --> A
+    A --> WS[WebSocket updates]
+    WS --> W
+    A --> K[Curated Markdown / BM25]
+    K --> R[Documentation answer generation]
+    R --> L
+```
+
+The web app handles presentation and server actions. The API enforces access, exposes run and knowledge endpoints, and queues jobs. The worker performs long-running browser/model work and exports. PostgreSQL stores durable records; Redis supports queues, live event delivery, approval coordination, and worker heartbeats.
+
+The worker is a separate process: a healthy home page and API do not prove that an agent can start. `/v1/runtime` reports whether a worker heartbeat is present.
+
+## 4. Technology and tool inventory
+
+Version families below describe repository dependencies, not claims about the latest available releases. `pnpm-lock.yaml` is authoritative for exact installed resolutions.
+
+| Area                   | Technology                                            | Purpose                                              |
+| ---------------------- | ----------------------------------------------------- | ---------------------------------------------------- |
+| Language/runtime       | TypeScript, Node.js; Node 22 used by CI               | Typed application and worker code                    |
+| Workspace/build        | pnpm 9.15.9, Turborepo                                | Workspace dependencies, build ordering, task caching |
+| Frontend               | Next.js 15, React 19, App Router                      | Pages, server actions, rendering                     |
+| Styling                | Tailwind CSS 4, shared CSS tokens                     | Responsive layout and visual system                  |
+| UI components          | Owned shadcn-derived components, Radix Dialog, Lucide | Controls, dialogs, icons                             |
+| Client state           | Zustand                                               | Event-driven run state and replay                    |
+| Fonts                  | Fontsource Inter and JetBrains Mono                   | Self-hosted UI and monospace fonts                   |
+| API                    | Fastify 5, Zod, fastify-type-provider-zod             | HTTP routing and validated request/response shapes   |
+| API documentation      | Fastify Swagger and Swagger UI                        | OpenAPI documentation at `/docs`                     |
+| API protections        | CORS, Helmet, rate-limit plugins                      | Origin rules, headers, request limits                |
+| Authentication         | Auth.js / next-auth 5 beta, Prisma adapter            | Google OAuth and email magic links                   |
+| Email                  | Nodemailer, SMTP, Mailpit locally                     | Sign-in delivery and local inbox                     |
+| Database               | PostgreSQL 16 locally, Prisma 6                       | Durable records, migrations, repositories            |
+| Background jobs        | BullMQ 5, Redis 7, ioredis                            | Planning, execution, export queues                   |
+| Browser                | playwright-core, Chromium                             | Controlled browser sessions, snapshots, captures     |
+| AI                     | Custom model router and Anthropic provider            | Agent-specific models, retries, validated output     |
+| Retrieval              | Custom BM25 implementation                            | Current documentation search without embeddings      |
+| Artifact storage       | Filesystem or S3-compatible adapter                   | Screenshots, captured DOM, exports                   |
+| Spreadsheet generation | ExcelJS 4                                             | XLSX workbook formatting and evidence sheets         |
+| Logging                | Pino / pino-pretty                                    | Structured service and run diagnostics               |
+| Testing                | Vitest, local integration scripts, Playwright checks  | Unit, integration, browser validation                |
+| Code quality           | ESLint 9, Prettier 3, TypeScript                      | Static checks and formatting                         |
+| Delivery               | Docker, Docker Compose, GitHub Actions                | Container packaging and CI                           |
+| AWS deployment files   | EC2-oriented Compose and Caddy                        | Web/API/worker hosting and TLS routing               |
+
+There is no LangChain/LlamaIndex orchestration dependency or vector database in the current RAG implementation. The browser workflow and knowledge tools are implemented directly in this monorepo.
+
+## 5. Repository map
+
+| Path                       | Responsibility                                                                |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `apps/web`                 | Next.js frontend, authentication integration, server actions, run UI          |
+| `apps/api`                 | Fastify routes, auth enforcement, queue producers, documentation RAG          |
+| `apps/api/knowledge-base`  | Five curated Markdown sources for documentation Q&A                           |
+| `apps/worker`              | Queue consumers, agents, browser sessions, telemetry, exports                 |
+| `apps/fixtures`            | Local demo pages, including monthly/annual pricing                            |
+| `packages/core`            | Shared domain types, action policy, orchestration, grounding, budget rules    |
+| `packages/auth`            | API tokens, capabilities, refresh rotation and revocation helpers             |
+| `packages/ai`              | Models, provider/router code, prompts, schemas, retrieval, guardrails         |
+| `packages/browser`         | BrowserDriver interface, Playwright/Browserbase/fixture drivers, session pool |
+| `packages/db`              | Prisma schema, migrations, typed repositories                                 |
+| `packages/events`          | Event contracts shared across worker, API, and UI                             |
+| `packages/storage`         | Filesystem/S3-compatible storage and signed artifact access                   |
+| `packages/export`          | Results transformation, workbook and CSV generation                           |
+| `packages/env`             | Shared environment validation                                                 |
+| `packages/ui`              | Shared UI components and design tokens                                        |
+| `packages/config`          | Shared lint and TypeScript configuration                                      |
+| `packages/integration`     | Integration exercises for browser, database, queues, storage                  |
+| `deploy/aws`               | AWS-oriented Compose deployment, environment template, Caddy configuration    |
+| `.github/workflows/ci.yml` | Formatting, types, lint, unit tests, and build checks                         |
+
+## 6. Research workflow
+
+1. **Sign in.** The web app establishes a session and obtains API access credentials.
+2. **Submit a goal.** The goal composer uses a POST operation. Opening or refreshing a draft page does not create a run.
+3. **Deduplicate submission.** A request UUID and server-side identity scope prevent concurrent retries of the same submission from creating separate runs. Reusing an identifier with different task input returns a conflict.
+4. **Queue planning.** The API persists the run and submits a BullMQ planning job. The UI distinguishes queued work from an offline worker.
+5. **Generate a plan.** The planner proposes objectives, URLs, expected fields, risk, duration, and estimated cost. The plan receives a hash.
+6. **Wait for approval.** The run becomes `AWAITING_APPROVAL`. Browser execution has not started. Planning itself uses the configured model and can incur cost.
+7. **Execute approved steps.** The worker opens a browser session, constrains navigation to the run's allowed hosts, and checks action permissions.
+8. **Capture evidence and extract.** The browser provides rendered text, accessibility information, HTML, and screenshots. The reasoning agent produces structured claims.
+9. **Ground and repair.** Deterministic checks reject unmatched evidence. Missing/rejected fields can receive one repair pass over the same captured page when the run is executing and has remaining budget/time.
+10. **Verify claims.** A separate model reads the source and produces a verdict. Verification is risk-weighted according to configured policy; do not assume every deployment verifies every claim.
+11. **Review the result set.** Schema-based coverage checks and the critic identify missing fields and cross-claim issues. Unresolved blocking findings pause the run.
+12. **Inspect results and export.** Users review grouped claims, evidence, findings, and model usage, then request an export.
+
+```mermaid
+flowchart LR
+    C[CREATED] --> P[PLANNING]
+    P --> A[AWAITING_APPROVAL]
+    A -->|Approve plan| E[EXECUTING]
+    E --> K[CRITIQUE]
+    K -->|No blocking finding| D[COMPLETED]
+    K -->|Blocking finding| PA[PAUSED]
+    E --> H[TAKEOVER / PAUSED]
+    E --> F[FAILED / CANCELLED]
+```
+
+The schema also defines `VERIFYING`, `RECOVERING`, and `FORMATTING`. Not every internal agent call produces a separate top-level status transition.
+
+**Execution completion and result completeness are different.** A completed run can be displayed as “Finished with missing data” or “Finished · review needed.” A crash is a failed run, even if it already created some usable claims.
+
+## 7. Agents and model routing
+
+An agent is a specialized application function plus prompt, schema, and model policy. It is not necessarily a separate server. Multiple functions can run sequentially within one worker job.
+
+| Role             | Responsibility                                                                    | Default primary model in repository |
+| ---------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
+| Planner          | Converts the goal into an approval-ready plan                                     | `claude-opus-4-5-20251101`          |
+| Browser          | Chooses the next browser action from the current snapshot                         | `claude-sonnet-4-5-20250929`        |
+| Reasoning        | Extracts entity/field/value claims and evidence                                   | `claude-sonnet-4-5-20250929`        |
+| Verification     | Independently reads source evidence and assigns verdicts                          | `claude-haiku-4-5-20251001`         |
+| Critic           | Reviews coverage, duplicates, units, contradictions, and other cross-claim issues | `claude-opus-4-5-20251101`          |
+| Recovery         | Chooses from permitted recovery strategies when a failure occurs                  | `claude-sonnet-4-5-20250929`        |
+| Formatter policy | Lightweight answer-formatting policy, also used by documentation RAG              | `claude-haiku-4-5-20251001`         |
+
+The source defines seven model-policy roles, but ordinary exports use deterministic TypeScript and ExcelJS. Do not claim every task invokes seven independent model agents. Recovery is conditional, and one role can make multiple calls.
+
+Model overrides use `QUORUM_MODEL_<ROLE>`. The router handles configured fallbacks, bounded retries, timeouts, output parsing, and cache eligibility. Prompt versions and model identifiers are recorded for diagnosis. Exact-match caching is distinct from RAG: it reuses eligible requests, rather than searching a document corpus.
+
+`QUORUM_LLM_MODE` controls provider behavior:
+
+- `auto`: live when an Anthropic key is configured, recorded otherwise.
+- `live`: requires the provider key.
+- `recorded`: uses recorded responses even if a key exists.
+
+Documentation Q&A requires live configuration; it does not silently pretend recorded output is a live answer. No model fine-tuning or custom model training is implemented.
+
+## 8. Browser automation
+
+The `BrowserDriver` interface separates worker logic from a specific browser backend. The primary local backend is Playwright/Chromium. A fixture driver supports repeatable tests; Browserbase delegates managed-browser operations through the same interface.
+
+The browser agent receives a compressed accessibility tree with numeric element references. Application code resolves references to elements. Model-generated selectors are not the primary action interface.
+
+Supported action vocabulary includes navigation, clicks, typing, selection, scrolling, waits, key presses, screenshot, `extract_ready`, and `give_up`. Policy classifies the action before execution. Content hashes support no-op detection.
+
+### Trust Ladder
+
+| Level | Typical action                               | Approval behavior                                              |
+| ----- | -------------------------------------------- | -------------------------------------------------------------- |
+| L0    | Read, extract, screenshot, scroll            | Not individually gated after plan approval                     |
+| L1    | Navigate within approved scope               | Not individually gated after plan approval                     |
+| L2    | Toggle, type, select                         | Gated in CAREFUL mode                                          |
+| L3    | Submit/send/delete or similar commit         | Gated in every mode                                            |
+| L4    | Credentials, payment, outside approved scope | Requires authorization; browser restrictions can still deny it |
+
+The autonomy setting changes friction, not unlimited authority. This is application policy and still requires testing against ambiguous controls and hostile pages; it is not a blanket security guarantee.
+
+Sessions have concurrency, idle, and maximum-duration limits. A heartbeat now marks an executing session active during long model calls, preventing idle cleanup from closing a browser during verification. The maximum session duration remains independently bounded.
+
+## 9. Claims, evidence, and quality
+
+A claim is one fact about one entity, for example:
+
+```json
+{
+  "entity": "Collect",
+  "field": "monthly_price",
+  "value": 8,
+  "sourceUrl": "http://localhost:3002/pricing",
+  "sourceText": "$8"
+}
+```
+
+Real records also carry their step, unit, timestamps, model, prompt version, confidence, ambiguity/null reason, status, and artifact keys when captured. The example is illustrative, not the entire schema.
+
+### Four distinct checks
+
+| Check                   | What it establishes                                                               | What it does not establish                                          |
+| ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Zod output validation   | Response has the expected structure                                               | Factual truth                                                       |
+| Deterministic grounding | Quoted source text occurs in captured content; numeric-value checks where enabled | That every claim interpretation is correct                          |
+| Model verification      | A second reading supports, contradicts, or questions the claim                    | Guaranteed independent truth or calibrated confidence               |
+| Coverage/critic review  | Declared fields and cross-claim consistency are examined                          | Discovery of every entirely omitted entity or every possible defect |
+
+Current claim statuses are `UNVERIFIED`, `VERIFIED`, `CONTRADICTED`, `UNSUPPORTED`, `AMBIGUOUS`, `SUPERSEDED`, and `HUMAN_CORRECTED`. A confidence score is a model estimate, not a certified probability.
+
+“Evidence could not be matched” means proposed claims were excluded. It can indicate fabricated quotes, joined snippets, or incompatible formatting. It does not prove the underlying value was false. Missing information must remain visible rather than being silently filled in.
+
+Recent improvements use rendered page text for extraction and source matching, retaining accessibility snapshots for browser actions. Feature arrays and their verbatim source quotes are distinct: a formatted list value must not be used as an invented source quote. Custom prices must not be converted into guessed numbers; a `$` symbol alone does not establish a currency code.
+
+### Screenshots and artifacts
+
+- Live screencast frames are transient and streamed to the UI; they are not all durable replay evidence.
+- Extraction captures persist screenshot and DOM artifacts when storage is configured, and claims link to them.
+- A final browser frame is retained when capture succeeds.
+- Signed URLs expire; the evidence endpoint generates fresh URLs for stored images.
+- CSP and cross-origin response headers must allow the configured artifact origin.
+- Older runs may have only a final image. New code cannot recreate an uncaptured historical screenshot.
+
+### Exports
+
+The worker supports XLSX, CSV, and JSON. The workbook includes a pricing summary when applicable, Results, Provenance, Findings, and About this export. Evidence and review flags remain part of the deliverable. String values are handled to reduce spreadsheet formula-injection risk. Export generation does not require an extra formatter model call.
+
+## 10. Current documentation RAG
+
+RAG means retrieval-augmented generation: retrieve relevant stored content, then ask a model to answer using that content. It does not require embeddings by definition.
+
+The current implementation is in [knowledge.ts](../apps/api/src/services/knowledge.ts) and [packages/ai/src/rag](../packages/ai/src/rag). The UI is `/knowledge`.
+
+| Corpus file                    | Topic                           | Source metadata                                 |
+| ------------------------------ | ------------------------------- | ----------------------------------------------- |
+| `product-overview.md`          | Product purpose                 | `README.md`                                     |
+| `run-lifecycle.md`             | Planning through results        | `README.md`                                     |
+| `trust-and-approval.md`        | Action policy and approvals     | `README.md`                                     |
+| `claims-and-verification.md`   | Facts, provenance, verification | `docs/ARCHITECTURE.md`                          |
+| `deployment-and-operations.md` | Services and operations         | `docs/DEPLOYMENT.md`, `docs/TROUBLESHOOTING.md` |
+
+These files are curated summaries. Referencing another document in `Source:` does not automatically index that document. This new guide is also **not automatically indexed**.
+
+### Current pipeline
+
+1. Authenticate and validate a question of 3–1,000 characters.
+2. Apply deterministic scope/injection checks.
+3. Load `apps/api/knowledge-base/*.md` into an API-process cache.
+4. Split at second-level `##` headings; remove the top-level title and `Source:` metadata from content.
+5. Rank chunks with BM25 keyword retrieval.
+6. Select up to four chunks and 10,000 context characters.
+7. Generate a JSON answer through the configured formatter model policy.
+8. Validate answer shape, allowed citation labels, citation consistency, and cited segments.
+9. Return an answer with source excerpts, or abstain.
+
+At this snapshot the five documents contain no `##` headings, so they yield **five chunks total**. There is no embedding generation, vector index, automatic file upload, or ingestion of browser results.
+
+Internal allowlisted tools are `search_knowledge` and `list_knowledge_sources`. Application code chooses these functions; this is not an MCP server or unrestricted model tool loop. They do not approve plans, write data, or control browsers.
+
+Questions are independent requests. The UI displays a conversation, but earlier turns are not included in each model prompt. Knowledge questions and retrieved excerpts are sent to the configured provider in live mode.
+
+Citations prove traceability and formatting, not semantic entailment. BM25 can miss paraphrases. Pattern checks cannot detect every prompt-injection attempt. The assistant abstains when it cannot produce a supported answer.
+
+Example questions:
+
+- “When does QUORUM require human approval?”
+- “How does claim verification work?”
+- “Where are run events stored?”
+- “What is QUORUM's SOC 2 completion date?” — should abstain because this is not established by the corpus.
+
+## 11. Proposed research RAG
+
+**This section is a design direction discussed with the product owner, not implemented functionality.**
+
+The intended product is “Ask about this run,” followed by search across selected runs and user-uploaded documents. Users should be able to reuse research without rerunning the browser agents for every question.
+
+```mermaid
+flowchart TD
+    R[Completed run evidence] --> I[Permission-aware ingestion]
+    D[Uploaded documents - proposed] --> I
+    I --> C[Section chunks + provenance]
+    C --> EM[Embedding service - not selected]
+    EM --> V[(Proposed PostgreSQL pgvector index)]
+    U[User question + authorized run scope] --> RET[Hybrid retrieval]
+    V --> RET
+    SQL[(Structured claims in PostgreSQL)] --> RET
+    RET --> ANS[Cited answer or explicit abstention]
+    ANS --> F[Optional fresh-research request]
+    F --> AP[Existing planning and approval workflow]
+```
+
+The proposed division of responsibility is:
+
+- **PostgreSQL facts:** exact prices, entities, units, verification status, dates, run ownership. Filtering, totals, and comparisons should use structured queries where possible.
+- **Vector/keyword retrieval:** relevant passages from captured source text and uploaded documents.
+- **Artifact storage:** original files, HTML, and screenshots. Vector rows reference these objects; they do not replace them.
+
+A proposed chunk record should include organization, run/document ID, source URL, section/page, capture time, content hash, text, embedding model/version, and linked claim/artifact identifiers. Embedding provider, dimensions, chunk sizing, and index settings remain undecided and require evaluation.
+
+Required boundaries before implementation:
+
+1. Apply organization and run permissions before retrieval; never retrieve everything and hide unauthorized snippets afterward.
+2. Preserve capture times and versions. Historical evidence must not silently become a current fact.
+3. Distinguish verified, disputed, and unverified information in answers.
+4. Keep exact arithmetic out of approximate vector similarity.
+5. Treat retrieved text as untrusted data, including uploaded documents.
+6. Propagate document/run deletion and permission changes into the index.
+7. Index jobs must be idempotent, observable, and retryable without duplicate chunks.
+8. Missing evidence produces an explanation, not an invented answer or automatic browser run.
+9. Fresh research remains a distinct action with the existing approval boundary.
+
+Implementation sequence: run-scoped Q&A → retrieval and citation evaluations → selected cross-run comparisons → uploads and document lifecycle → cost/performance tuning. No pgvector migration or embedding API has been added yet.
+
+## 12. Storage and database
+
+The Prisma schema lives in [schema.prisma](../packages/db/prisma/schema.prisma). Typed repositories are the main application boundary around persistence.
+
+| Record group               | Main models                                    | Purpose                                      |
+| -------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| Workspace/authentication   | Org, User, Account, Session, VerificationToken | Identity, membership, login                  |
+| API session security       | RefreshToken, AuthEvent                        | Rotation/revocation and authentication audit |
+| Task execution             | Run, Step                                      | Goal, status, plan, budget, progress         |
+| Evidence                   | Claim, Verdict                                 | Extracted facts and independent readings     |
+| Review/approval            | Critique, Approval                             | Findings, decisions, action authority        |
+| Recovery                   | RecoveryAttempt, UndoFrame                     | Attempts and browser recovery metadata       |
+| Observability              | Event, LlmCall                                 | Timeline, models, tokens, latency, costs     |
+| Files                      | Artifact                                       | Storage keys, MIME type, file metadata       |
+| Additional schema concepts | Recipe, ShareLink                              | Do not assume complete UI support            |
+
+Claims retain supersession history rather than silently replacing an old assertion. Costs use decimal persistence/integer micro-dollar calculations rather than arbitrary floating-point arithmetic as the accounting source.
+
+Redis supports `quorum.run` and `quorum.export` queues. Stable planning and approval-execution job identifiers reduce duplicate jobs. Redis also supports live events and worker availability; it is operational state, not merely an optional speed cache.
+
+Storage resolution chooses S3-compatible storage when credentials are present, otherwise a configured filesystem root. Filesystem storage is appropriate for a local single-machine environment, not a shared multi-machine deployment. Never make private artifact buckets public to solve an image-loading problem.
+
+## 13. Authentication and permissions
+
+Auth.js supports local email magic links and optional Google OAuth. Mailpit receives local messages at `http://localhost:8025`; SMTP runs on port 1025.
+
+The web app maintains the login session and forwards short-lived API access tokens. API routes verify identity and capabilities. Refresh tokens are opaque, hashed in storage, and rotated; replay handling can revoke a token family. Session-cookie and API-signing secrets are different concerns and should use distinct generated values.
+
+Run detail access is organization-scoped. A 404 can mean that a run exists but is not accessible in the signed-in workspace. Do not weaken this check to make a shared link work. Sign in to the appropriate account and navigate through Tasks.
+
+Plan approval validates the plan hash. Per-action approval is a separate gate controlled by trust level and authority. Browser execution should not be used to bypass an unapproved plan.
+
+Current mitigations include schema validation, scoped reads, capability checks, signed artifact URLs, origin/header policies, action classification, and injection checks. These are implemented controls, not proof that all security threats have been eliminated. Log configuration and secret masking still warrant production review.
+
+## 14. UI and API reference
+
+### Local pages
+
+| URL/path                        | Purpose                                          |
+| ------------------------------- | ------------------------------------------------ |
+| `http://localhost:3000/`        | New research task                                |
+| `/signin`                       | Sign-in                                          |
+| `/runs`                         | Task history for the signed-in user              |
+| `/runs/new?goal=...`            | Editable draft; opening it creates no job        |
+| `/runs/<runId>`                 | Plan approval, results, findings, activity, cost |
+| `/runs/<runId>/evidence`        | Saved screenshot evidence                        |
+| `/runs/<runId>/replay`          | Event replay                                     |
+| `/knowledge`                    | Current documentation Q&A                        |
+| `/account`                      | Account/session information                      |
+| `http://localhost:3002/pricing` | Controlled demo target                           |
+| `http://localhost:8025/`        | Local email inbox                                |
+
+### Main API routes
+
+The API defaults to `http://localhost:3001`. See `/docs` for generated request schemas.
+
+| Method/path                         | Purpose                                           |
+| ----------------------------------- | ------------------------------------------------- |
+| `GET /healthz`                      | API liveness                                      |
+| `GET /readyz`                       | Database/Redis readiness                          |
+| `GET /v1/runtime`                   | Worker availability                               |
+| `POST /v1/runs`                     | Create/queue a task                               |
+| `GET /v1/runs`                      | List runs for the current user                    |
+| `GET /v1/runs/:runId`               | Run and plan details                              |
+| `GET /v1/runs/:runId/report`        | Outcome, claims, findings, evidence, usage        |
+| `GET /v1/runs/:runId/events`        | Persisted events                                  |
+| `GET /v1/runs/:runId/screenshots`   | Authorized saved-image references                 |
+| `POST /v1/runs/:runId/plan/approve` | Approve a specific plan hash                      |
+| `POST /v1/runs/:runId/control`      | Run controls; inspect schema for allowed commands |
+| `POST /v1/runs/:runId/export`       | Queue an export                                   |
+| `GET /v1/runs/:runId/export`        | Export status/artifact information                |
+| `POST /v1/knowledge/ask`            | Documentation question                            |
+| `GET /v1/knowledge/sources`         | Documentation source list                         |
+| `/v1/ws`                            | Authenticated WebSocket stream                    |
+
+Additional routes cover approval decisions, critique resolutions, account/workspace information, and signed artifact retrieval. This table is an overview, not a substitute for route schemas.
+
+## 15. Local setup
+
+### Use the correct worktree
+
+The active recovery worktree used during this work is `/Users/suryareddy/Downloads/quorum`, branch `quorum-rag-recovery`. The earlier Desktop copy had iCloud download problems. Keep development files in a fully local folder and do not overwrite an existing checkout or `.env.local`.
+
+### Prerequisites
+
+Use Node 22 to match CI, pnpm 9.15.9, Docker, and a local Chromium installation. The package engine permits Node >=20.11, but Node 22 is the documented project baseline.
+
+For a fresh clone only:
+
+```bash
+git clone https://github.com/GowriSankarTatipathi/quorum.git
+cd quorum
+corepack enable
+corepack prepare pnpm@9.15.9 --activate
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+```
+
+Select the branch containing the desired changes. A fresh clone will not include uncommitted changes from another worktree.
+
+Generate separate secrets using `openssl rand -base64 48` and enter them locally for `AUTH_SECRET`, `JWT_SECRET`, and `ARTIFACT_SIGNING_SECRET`. Never paste their values into documentation or commit them.
+
+### Correct the local database port
+
+`docker-compose.yml` maps host **5433** to container 5432. At this snapshot `.env.example` still shows 5432. For this local Docker database, set both URLs to port 5433:
+
+```dotenv
+DATABASE_URL=postgresql://quorum:quorum@localhost:5433/quorum?schema=public
+DIRECT_URL=postgresql://quorum:quorum@localhost:5433/quorum?schema=public
+```
+
+Those credentials are local development defaults, not production credentials.
+
+### Check services before starting them
+
+```bash
+git status --short
+docker compose ps
+lsof -nP -iTCP:3000 -iTCP:3001 -iTCP:3002 -sTCP:LISTEN
+curl -s http://localhost:3001/healthz
+curl -s http://localhost:3001/readyz
+curl -s http://localhost:3001/v1/runtime
+```
+
+If services are already running, reuse them. Do not launch a second `pnpm dev` stack against occupied ports.
+
+For a fresh environment with services not yet running:
+
+```bash
+docker compose up -d
+pnpm db:generate
+pnpm exec dotenv -e .env.local -- pnpm db:deploy
+pnpm --filter @quorum/browser exec playwright-core install chromium
+pnpm build
+pnpm dev
+```
+
+Use the dotenv wrapper for commands that need `.env.local`; the root `dev` script already supplies it. The optional seed is `pnpm exec dotenv -e .env.local -- pnpm db:seed`; do not reseed an environment merely to diagnose a runtime error.
+
+### First manual check
+
+1. Open `/signin`, request a local magic link, and retrieve it from Mailpit.
+2. Open `/runs` and `/knowledge` to verify protected navigation.
+3. Confirm `/v1/runtime` reports a ready worker before submitting research.
+4. Submit the pricing example once and approve its plan in the app.
+5. Check four plans, monthly billing, feature lists, citations/screenshots, findings, usage, and export.
+
+The fixture intentionally defaults to annual billing. Expected monthly displays are Starter `$0`, Collect `$8`, Control `$18`, Enterprise `Custom`. Features are defined in [the fixture page](../apps/fixtures/src/app/pricing/page.tsx); use that file as the test oracle rather than assuming a model answer is correct.
+
+## 16. Configuration
+
+| Group          | Important variables                                                                      | Notes                                                   |
+| -------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Database/queue | `DATABASE_URL`, `DIRECT_URL`, `REDIS_URL`                                                | Load correct environment for migrations and processes   |
+| API            | `PORT`, `HOST`, `WEB_ORIGIN`                                                             | API normally 3001 locally                               |
+| Auth           | `AUTH_SECRET`, `AUTH_URL`, `AUTH_TRUST_HOST`, `JWT_SECRET`                               | API-signing values must agree across relevant services  |
+| Email/OAuth    | `EMAIL_SERVER_*`, `EMAIL_FROM`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`               | Configure at least one usable sign-in method            |
+| Models         | `ANTHROPIC_API_KEY`, `QUORUM_LLM_MODE`, `QUORUM_MODEL_*`                                 | API needs provider config for RAG; worker for agents    |
+| Model limits   | `LLM_TIMEOUT_MS`, `LLM_RETRIES_PER_MODEL`, `LLM_CACHE_TTL_S`                             | Retries can increase cost and duration                  |
+| Browser        | `BROWSER_DRIVER`, `MAX_CONCURRENT_SESSIONS`, `SESSION_IDLE_TIMEOUT_MS`                   | Browserbase credentials only for that backend           |
+| Execution      | `MAX_RUN_DURATION_MS`, recovery limits, `APPROVAL_TIMEOUT_S`, `VERIFICATION_SAMPLE_RATE` | Actual environment values override defaults             |
+| Storage        | `R2_*`, `ARTIFACT_ROOT`, `ARTIFACT_BASE_URL`, `ARTIFACT_SIGNING_SECRET`                  | R2 naming is also used for other S3-compatible services |
+| Client origins | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, artifact origin configuration               | Public variables must never contain secrets             |
+
+Restart affected processes after changing secrets, models, or cached knowledge content. Compiled worker startup uses `dist`; source edits need a build and worker restart unless a watcher is in use. Next.js public variables are build-time inputs for production bundles.
+
+Cost display includes recorded model calls, per-agent cost, planned-step estimate when present, and budget. Infrastructure charges are separate. Budget checks and bounded retries do not guarantee a provider invoice exactly equals an estimate; verify deployment-specific accounting and request boundaries.
+
+## 17. Testing and evaluation
+
+### Repository checks
+
+```bash
+pnpm format:check
+pnpm typecheck
+pnpm lint
+pnpm test:unit
+pnpm build
+```
+
+CI performs these checks on pull requests and pushes to `main`, using Node 22 and pnpm 9.15.9. Builds use non-secret configuration. A feature-branch push alone does not necessarily trigger this workflow unless a PR event occurs.
+
+Focused checks:
+
+```bash
+pnpm --filter @quorum/worker test
+pnpm --filter @quorum/ai test
+pnpm --filter @quorum/web test
+pnpm --filter @quorum/api exec vitest run src/routes/runs-experience.test.ts
+pnpm --filter @quorum/ai exec vitest run src/rag
+```
+
+Integration scripts include `pnpm e2e`, `pnpm e2e:browser`, `pnpm e2e:actions`, `pnpm e2e:db`, and `pnpm e2e:queue`. Inspect their configuration before running: integration work can create records, launch browsers, and use live models when a live environment is selected.
+
+Recent local checks covered duplicate submissions, draft GET behavior, rendering on desktop/mobile, evidence image loading, bounded repair, source-specific coverage, injection handling, and session heartbeat cleanup. These checks are not a substitute for a fresh live workflow after a model/prompt change.
+
+### Acceptance criteria for a pricing run
+
+- Approval occurs before browsing, and action approval remains effective.
+- All four fixture entities appear without duplicates.
+- Monthly/annual prices are not mixed.
+- All requested feature lists are present or explicitly reported missing.
+- Custom pricing remains custom; unavailable numeric values are not fabricated.
+- Source quotes match actual captured text and screenshots load.
+- Contradicted/unsupported/ambiguous findings remain visible.
+- Export matches the reviewed result.
+- The browser survives long verification and closes after execution.
+- Calls, cost, duration, repairs, and failures can be inspected.
+
+### Quality measurements still needed
+
+Track field/entity completeness, wrong accepted claims, correct claims wrongly rejected, citation support, verifier error-detection rate, retrieval recall, abstention quality, latency, and cost per completed task. Include adversarial pages and changing billing periods. Do not interpret model confidence as measured calibration.
+
+For proposed research RAG, add permission-isolation, stale-version, document-deletion, exact-number, contradictory-evidence, and prompt-injection tests before release.
+
+## 18. Deployment and operations
+
+The repository contains multiple deployment generations. The AWS Compose files describe web, API, and worker containers behind Caddy, with external PostgreSQL, Redis, and S3-compatible storage. The README describes EC2 with Neon, Upstash, and Supabase storage. This guide has not verified that public deployment's current health.
+
+The older [DEPLOYMENT.md](DEPLOYMENT.md) describes Fly.io/Vercel/Browserbase/R2 and contains historical assumptions. Do not combine its commands and credentials with AWS deployment files without reviewing the target architecture. Its cost estimates and service claims are not current guarantees.
+
+For the AWS configuration, review [the Compose file](../deploy/aws/docker-compose.prod.yml), its environment template, Dockerfiles, and Caddy configuration. The deployment command is:
+
+```bash
+docker compose -f deploy/aws/docker-compose.prod.yml --env-file deploy/aws/.env up -d --build
+```
+
+This is documentation, not an instruction to deploy now. Prepare secrets, database migrations, backups, build-time public origins, SMTP/OAuth settings, and persistent artifact access first. In particular, verify the deployed web service receives whichever sign-in method is intended; local Mailpit settings do not provide production email delivery.
+
+Operational checks:
+
+- `/healthz`: process is alive.
+- `/readyz`: database and Redis are reachable.
+- `/v1/runtime`: a worker is reporting availability.
+- Queue waiting/active/failed counts: work is progressing.
+- `Event` and `LlmCall`: failed steps, latency, model usage, prompt version.
+- Storage checks: evidence files exist and fresh signed URLs work.
+- Backups and restore drills: required separately for database and artifacts.
+
+A heartbeat is not proof that every agent/provider call works. A green unit-test workflow is not a production load or security test. External monitoring integrations and restart/crash recovery require additional validation.
+
+## 19. Troubleshooting
+
+| Symptom                             | Likely checks / next action                                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Task stays queued                   | Check worker heartbeat, Redis, queue state, worker logs; don't submit duplicates                           |
+| Run page 404                        | Check exact ID, signed-in workspace, Tasks listing, API organization scope                                 |
+| Too many redirects / missing token  | Reauthenticate; inspect session expiry and callback routing; do not make protected pages public            |
+| Documentation assistant abstains    | Verify corpus contains the answer; check BM25 matches/citations; browser tasks belong in the goal composer |
+| Provider unavailable                | Validate configuration without printing keys, restart affected service, inspect safe error code            |
+| Evidence-match warning              | Compare verbatim quotes with captured text; distinguish formatting mismatch from unsupported content       |
+| Browser session not open            | Check idle/max-duration cleanup, worker restart, session heartbeat, browser crash                          |
+| Screenshot blank/blocked            | Check persisted key, signature expiry, storage origin, CSP/CORP headers                                    |
+| Custom pricing shown as zero        | Treat as a defect: retain displayed Custom and explicit numeric absence                                    |
+| Result completed but missing fields | Inspect outcome and coverage findings; completion only describes execution termination                     |
+| Export not ready                    | Check export queue, worker, and storage configuration                                                      |
+| Source file access hangs            | Check cloud-sync status; use a fully local worktree rather than discarding changes                         |
+| New prompt not taking effect        | Rebuild workspace packages and restart compiled worker; prompt filenames can retain older version suffixes |
+
+Do not clear queues, delete runs, restart an active worker, or alter access permissions as a generic first troubleshooting step. Inspect the current state and preserve existing work.
+
+## 20. Limitations and next milestones
+
+### Known limits
+
+- Current RAG only knows five curated documentation chunks, not research history.
+- A source citation or screenshot does not by itself prove a claim's interpretation.
+- Coverage checks depend on the approved schema and observed entities; an entirely omitted entity can escape deterministic checks.
+- A one-pass repair can still fail. Historical warnings remain historical; fixing code does not rewrite previous results.
+- Long runs can be costly. Model calls are not one-to-one with agent names.
+- Resume, retry, worker crash, duplicate delivery, and multi-user concurrency need continued failure testing.
+- Evidence storage and screenshot availability differ between older and newer runs.
+- Managed browser and external deployment variants are not all equally validated.
+- Existing documents contain stale assertions. Treat current code and verified runtime behavior as the source of truth.
+
+### Next milestones
+
+1. Establish a repeatable live/recorded evaluation suite with expected fixture outputs.
+2. Measure retrieval and extraction quality before tuning model cost or batching verification.
+3. Add run-scoped saved-evidence Q&A with permission-aware retrieval and citations.
+4. Introduce the proposed vector index and ingestion lifecycle only as a separate, tested implementation.
+5. Add cross-run comparisons and uploads after tenancy, freshness, and deletion behavior are validated.
+6. Validate production load, restoration, monitoring, and failure recovery before claiming production readiness.
+
+## 21. Glossary and source map
+
+| Term       | Meaning in QUORUM                                                       |
+| ---------- | ----------------------------------------------------------------------- |
+| Run        | One submitted research task                                             |
+| Step       | One approved-plan objective                                             |
+| Claim      | An extracted entity/field/value with provenance                         |
+| Grounding  | Mechanical matching of evidence against captured content                |
+| Verdict    | Independent verification result                                         |
+| Critique   | Cross-claim or coverage finding                                         |
+| Provenance | Where, when, and how a claim was obtained                               |
+| RAG        | Retrieval of saved content before answer generation                     |
+| Chunk      | A text passage indexed for retrieval                                    |
+| Embedding  | A numeric representation for semantic similarity; proposed here         |
+| BM25       | Lexical relevance scoring used by current documentation RAG             |
+| pgvector   | Proposed PostgreSQL vector-search extension; not installed by this work |
+| Abstention | Explicitly declining to answer without enough support                   |
+| Signed URL | Time-limited access to a stored artifact                                |
+
+Key implementation sources:
+
+- [Workspace scripts](../package.json) and [lockfile](../pnpm-lock.yaml)
+- [API routes](../apps/api/src/routes) and [knowledge service](../apps/api/src/services/knowledge.ts)
+- [Worker agents](../apps/worker/src/agents) and [execution processor](../apps/worker/src/processors/execute.processor.ts)
+- [Model policies](../packages/ai/src/models.ts), [configuration](../packages/ai/src/config.ts), and [prompts](../packages/ai/src/prompts)
+- [Trust Ladder](../packages/core/src/policy/trust-ladder.ts) and [grounding](../packages/core/src/verify/grounding.ts)
+- [Browser driver](../packages/browser/src/playwright/driver.ts) and [session pool](../packages/browser/src/session-pool.ts)
+- [Prisma schema](../packages/db/prisma/schema.prisma)
+- [Export processor](../apps/worker/src/processors/export.processor.ts) and [workbook generation](../packages/export/src/xlsx.ts)
+- [RAG-specific guide](RAG.md), [architecture](ARCHITECTURE.md), [troubleshooting](TROUBLESHOOTING.md)
+
+A short project description for a presentation:
+
+> QUORUM is an evidence-oriented browser research application. It combines human-approved plans, specialized model roles, deterministic action and evidence checks, and traceable exports. Its current documentation assistant uses BM25 retrieval over curated Markdown. The planned next stage is permission-aware Q&A over saved research evidence, using structured facts alongside a vector-search index.

@@ -349,16 +349,18 @@ export class PlaywrightDriver implements BrowserDriver {
   async capture(session: Session): Promise<PageCapture> {
     const live = this.live(session.id);
     const snapshot = await this.snapshot(session);
-    const [html, screenshot, cookies] = await Promise.all([
+    const [html, screenshot, cookies, text] = await Promise.all([
       live.page.content(),
       this.screenshot(session),
       live.context.cookies(),
+      live.page.locator('body').innerText(),
     ]);
     return {
       url: snapshot.url,
       title: snapshot.title,
       html,
       a11y: snapshot.tree,
+      text,
       screenshot,
       contentHash: snapshot.contentHash,
       scrollY: snapshot.scrollY,

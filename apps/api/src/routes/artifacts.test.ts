@@ -161,6 +161,7 @@ describe('GET /v1/artifacts', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('fake-png-data');
     expect(response.headers['content-type']).toBe('image/png');
+    expect(response.headers['cross-origin-resource-policy']).toBe('cross-origin');
     expect(response.headers['content-disposition']).toBe('attachment; filename="download.png"');
   });
 

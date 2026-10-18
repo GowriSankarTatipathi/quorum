@@ -52,11 +52,15 @@ export async function enqueueRunPlan(runId: string): Promise<void> {
 
 /** Enqueued after plan approval, and again on resume. The job id is per-attempt so a
  *  resumed run is a new job rather than a duplicate of a completed one. */
-export async function enqueueRunExecute(runId: string): Promise<void> {
+export async function enqueueRunExecute(runId: string, planHash?: string): Promise<void> {
   await getRunQueue().add(
     'run.execute',
     { runId },
-    { jobId: `exec-${runId}-${String(Date.now())}` },
+    {
+      jobId: planHash
+        ? `exec-${runId}-approved-${planHash}`
+        : `exec-${runId}-${String(Date.now())}`,
+    },
   );
 }
 
@@ -79,4 +83,37 @@ export async function closeQueue(): Promise<void> {
   if (_runQueue) promises.push(_runQueue.close());
   if (_exportQueue) promises.push(_exportQueue.close());
   await Promise.allSettled(promises);
+}
+
+/** Queue rank is approximate and excludes jobs already active. */
+export async function runQueuePosition(runId: string): Promise<number | null> {
+  const waiting = await getRunQueue().getWaiting(0, 999);
+  const index = waiting.findIndex((job) => (job.data as { runId?: string }).runId === runId);
+  return index < 0 ? null : index + 1;
+}
+
+export async function workerAvailability(): Promise<{
+  state: 'ready' | 'offline' | 'unknown';
+  workers: number;
+}> {
+  try {
+    const ids = await redis.hkeys('quorum:workers');
+    const alive = await Promise.all(ids.map((id) => redis.exists(`quorum:workers:${id}:alive`)));
+    const workers = alive.filter(Boolean).length;
+    return { state: workers ? 'ready' : 'offline', workers };
+  } catch {
+    return { state: 'unknown', workers: 0 };
+  }
+}
+
+export async function isPlanExecutionQueued(
+  runId: string,
+  planHash: string | null,
+): Promise<boolean> {
+  if (!planHash) return false;
+  const job = await getRunQueue().getJob(`exec-${runId}-approved-${planHash}`);
+  if (!job) return false;
+  return ['waiting', 'active', 'delayed', 'waiting-children', 'prioritized'].includes(
+    await job.getState(),
+  );
 }

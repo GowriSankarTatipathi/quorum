@@ -16,7 +16,8 @@ interface RunDetail {
 export default async function ReplayPage({ params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
   const session = await auth();
-  if (!session?.user.id) redirect(`/signin?callbackUrl=/runs/${runId}/replay`);
+  if (!session?.user.id || !session.accessToken || session.error)
+    redirect(`/signin?callbackUrl=/runs/${runId}/replay`);
 
   try {
     const [detail, history] = await Promise.all([
@@ -28,6 +29,9 @@ export default async function ReplayPage({ params }: { params: Promise<{ runId: 
 
     return <ReplayCanvas runId={detail.run.id} goal={detail.run.goal} events={history.events} />;
   } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      redirect(`/signin?callbackUrl=/runs/${runId}/replay`);
+    }
     if (error instanceof ApiClientError && error.status === 404) notFound();
     throw error;
   }

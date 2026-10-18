@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { formatUsd } from '@/lib/format';
-import { apiFetch } from '@/lib/api-client';
+import { ApiClientError, apiFetch } from '@/lib/api-client';
 import { auth } from '@/server/auth';
 
 export const metadata: Metadata = { title: 'Runs — QUORUM' };
@@ -28,9 +28,18 @@ const STATUS_COLOUR: Record<string, string> = {
 
 export default async function RunsPage() {
   const session = await auth();
-  if (!session?.user.id) redirect('/signin?callbackUrl=/runs');
+  if (!session?.user.id || !session.accessToken || session.error)
+    redirect('/signin?callbackUrl=/runs');
 
-  const { runs } = await apiFetch<{ runs: RunSummary[] }>('/v1/runs?limit=50');
+  let runs: RunSummary[];
+  try {
+    ({ runs } = await apiFetch<{ runs: RunSummary[] }>('/v1/runs?limit=50'));
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      redirect('/signin?callbackUrl=/runs');
+    }
+    throw error;
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-5 py-10">
@@ -57,7 +66,11 @@ export default async function RunsPage() {
                 <span
                   className={`shrink-0 font-mono text-[11px] uppercase ${STATUS_COLOUR[run.status] ?? 'text-fg-subtle'}`}
                 >
-                  {run.status.toLowerCase().replace('_', ' ')}
+                  {run.status === 'COMPLETED'
+                    ? 'finished · review results'
+                    : run.status === 'CREATED'
+                      ? 'queued'
+                      : run.status.toLowerCase().replaceAll('_', ' ')}
                 </span>
                 <span className="shrink-0 font-mono text-[11px] tabular-nums text-fg-subtle">
                   {formatUsd(run.spentUsd)}

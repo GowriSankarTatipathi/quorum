@@ -1,12 +1,14 @@
 import { IDENTITY, INJECTION_RESISTANCE, JSON_ONLY } from './shared/index.js';
 
-export const VERIFICATION_PROMPT_VERSION = 'verification.v2';
+export const VERIFICATION_PROMPT_VERSION = 'verification.v3';
 
 export interface VerificationAgentInput {
   url: string;
   capturedAt: string;
   /** The region of the page the claim came from. */
   sourceRegion: string;
+  entity: string;
+  nullReason?: string | null;
   field: string;
   claimedValue: unknown;
   unit: string | null;
@@ -45,7 +47,11 @@ ${INJECTION_RESISTANCE}
      AMBIGUOUS     — the source supports more than one reading; say which in the rationale
 3. Agreement is not the goal. A CONTRADICTED verdict that is correct is the most valuable
    output you can produce. Do not soften a disagreement to be agreeable.
-4. Compare like with like. A claim of 12 against a page showing "$12/user/month" is
+4. Scope your reading to the named entity (plan, product, or vendor). Other entities on
+   the same page are not alternative readings of this entity's field. If the entity
+   cannot be located, say UNSUPPORTED. A null numeric price with reason not_present can
+   be CONFIRMED when this entity says Custom or Contact sales; do not invent a number.
+5. Compare like with like. A claim of 12 against a page showing "$12/user/month" is
    CONFIRMED; a claim of 12 against "$12/user/year" is CONTRADICTED, because the basis
    differs even though the number does not.
 </method>
@@ -64,7 +70,7 @@ ${JSON_ONLY}
   const user = `<source url="${input.url}" captured="${input.capturedAt}">
 ${input.sourceRegion}
 </source>
-<claim field="${input.field}" value=${JSON.stringify(String(input.claimedValue))} unit=${JSON.stringify(input.unit ?? '')} />`;
+<claim>${JSON.stringify({ entity: input.entity, field: input.field, value: input.claimedValue, unit: input.unit, nullReason: input.nullReason ?? null })}</claim>`;
 
   return { system, user };
 }

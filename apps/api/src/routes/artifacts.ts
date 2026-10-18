@@ -83,6 +83,10 @@ export const artifactRoutes: FastifyPluginAsyncZod = (app) => {
       const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
 
       void reply.type(mimeType);
+      // Signed image URLs authorize access. The web UI runs on a separate origin.
+      if (mimeType.startsWith('image/')) {
+        void reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+      }
 
       if (filename) {
         // Sanitize filename for Content-Disposition header

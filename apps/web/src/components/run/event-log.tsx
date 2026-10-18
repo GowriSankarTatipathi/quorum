@@ -8,6 +8,7 @@ import { useRunStore } from '@/stores/run-store';
 const TYPE_COLOUR = (type: string): string => {
   if (type.endsWith('.failed') || type.startsWith('error.')) return 'text-failed';
   if (type.startsWith('security.')) return 'text-review';
+  if (type === 'claim.contradicted') return 'text-review';
   if (type.startsWith('claim.') || type.startsWith('approval.')) return 'text-verified';
   if (type.startsWith('human.')) return 'text-[var(--color-action)]';
   return 'text-fg-subtle';
@@ -61,7 +62,9 @@ export function EventLog() {
             <span suppressHydrationWarning className="shrink-0 tabular-nums text-fg-subtle">
               {formatEventTime(event.ts, startedAt)}
             </span>
-            <span className={cn('shrink-0', TYPE_COLOUR(event.type))}>{event.type}</span>
+            <span className={cn('shrink-0', TYPE_COLOUR(event.type))}>
+              {event.type === 'claim.contradicted' ? 'verification needs review' : event.type}
+            </span>
             <span className="truncate text-fg-subtle">{summarise(event.payload)}</span>
           </div>
         ))}
@@ -73,7 +76,9 @@ export function EventLog() {
 /** One line per event. The full payload lives in the database; this is for scanning. */
 function summarise(payload: unknown): string {
   if (payload === null || typeof payload !== 'object') return '';
-  const entries = Object.entries(payload as Record<string, unknown>)
+  const body = payload as Record<string, unknown>;
+  if (typeof body.humanMessage === 'string') return body.humanMessage;
+  const entries = Object.entries(body)
     .filter(([, value]) => value !== null && typeof value !== 'object')
     .slice(0, 3)
     .map(([key, value]) => `${key}=${String(value)}`);

@@ -17,7 +17,7 @@ export const PROTECTED_PREFIXES = [
   '/usage',
 ] as const;
 
-/** Signed-in users have no reason to see these, and bouncing them avoids a dead end. */
+/** Authentication pages stay reachable even when an existing session needs recovery. */
 export const AUTH_ROUTES = ['/signin', '/verify-request'] as const;
 
 /**
