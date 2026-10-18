@@ -21,7 +21,26 @@ function styleHeader(sheet: ExcelJS.Worksheet): void {
   header.font = { bold: true, color: { argb: 'FFFAFAFA' }, size: 10 };
   header.fill = HEADER_FILL;
   header.height = 20;
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  sheet.views = [{ state: 'frozen', ySplit: 1, showGridLines: false }];
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columnCount } };
+  sheet.eachRow((row, index) => {
+    if (index === 1) return;
+    let lines = 1;
+    row.eachCell({ includeEmpty: true }, (cell, column) => {
+      cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF243247' } };
+      cell.alignment = { wrapText: true, vertical: 'top' };
+      const width = sheet.getColumn(column).width ?? 20;
+      lines = Math.max(
+        lines,
+        ...cell.text.split('\n').map((line) => Math.ceil(line.length / Math.max(8, width - 3))),
+      );
+      if (index % 2 === 0)
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F5F9' } };
+    });
+    row.height = Math.max(28, lines * 15 + 10);
+  });
+  sheet.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  sheet.pageSetup.printTitlesRow = '1:1';
 }
 
 /**
@@ -38,6 +57,56 @@ export async function buildWorkbook(bundle: ExportBundle, meta: WorkbookMeta): P
   workbook.creator = 'QUORUM';
   workbook.created = new Date();
 
+  // A compact pricing view keeps the original claim-level evidence intact below.
+  if (bundle.results.some((row) => row.field === 'price_display_text')) {
+    const summary = workbook.addWorksheet('Pricing summary');
+    summary.columns = [
+      { header: 'Plan', key: 'entity', width: 20 },
+      { header: 'Displayed price', key: 'price', width: 20 },
+      { header: 'Billing selection', key: 'billing', width: 20 },
+      { header: 'Seat basis', key: 'seats', width: 24 },
+      { header: 'Features', key: 'features', width: 38 },
+      { header: 'Review notes', key: 'review', width: 55 },
+    ];
+    const entities = [
+      ...new Set(
+        bundle.results.filter((row) => row.field === 'plan_name').map((row) => row.entity),
+      ),
+    ];
+    for (const entity of entities) {
+      const claims = bundle.results.filter((row) => row.entity === entity);
+      const display = (field: string): string => {
+        const matches = claims.filter((row) => row.field === field);
+        if (!matches.length) return 'Not extracted';
+        return matches
+          .map(
+            (row) =>
+              `${row.value === 'not_present' ? 'Not stated on source' : row.value}${row.unit ? ` ${row.unit}` : ''}${row.status === 'VERIFIED' || row.status === 'HUMAN_CORRECTED' ? '' : ` [${row.status.toLowerCase()}]`}`,
+          )
+          .join('\n');
+      };
+      summary.addRow({
+        entity,
+        price: display('price_display_text'),
+        billing: display('billing_period_confirmed'),
+        seats: display('seat_basis'),
+        features: display('features'),
+        review:
+          [
+            ...new Set([
+              ...claims
+                .filter((row) => row.needsReview || row.status === 'AMBIGUOUS')
+                .map((row) => `${row.field.replaceAll('_', ' ')}: ${row.status.toLowerCase()}`),
+              ...(!claims.some((row) => row.field === 'features')
+                ? ['Features were not extracted. See Findings.']
+                : []),
+            ]),
+          ].join('\n') || 'See Results and Provenance for claim details.',
+      });
+    }
+    styleHeader(summary);
+  }
+
   // ── Results ───────────────────────────────────────────────────────────────
   const results = workbook.addWorksheet('Results');
   results.columns = [
@@ -49,9 +118,19 @@ export async function buildWorkbook(bundle: ExportBundle, meta: WorkbookMeta): P
     { header: 'Status', key: 'status', width: 18 },
     { header: 'Note', key: 'note', width: 52 },
   ];
-  for (const row of bundle.results) results.addRow(row);
+  const sortedResults = [...bundle.results].sort(
+    (a, b) => a.entity.localeCompare(b.entity) || a.field.localeCompare(b.field),
+  );
+  for (const row of sortedResults) {
+    results.addRow({
+      ...row,
+      field: row.field.replaceAll('_', ' '),
+      value: row.value === 'not_present' ? 'Not stated on source' : row.value,
+      status: row.status.toLowerCase().replaceAll('_', ' '),
+    });
+  }
   styleHeader(results);
-  results.getColumn('confidence').numFmt = '0.000';
+  results.getColumn('confidence').numFmt = '0%';
 
   // Reserve visual emphasis for rows that genuinely need a human rather than
   // scanning all of them equally or throwing vague warnings.
@@ -63,7 +142,7 @@ export async function buildWorkbook(bundle: ExportBundle, meta: WorkbookMeta): P
       confidenceCell.numFmt = '';
     }
 
-    const resultData = bundle.results[index - 2];
+    const resultData = sortedResults[index - 2];
     if (resultData?.needsReview) {
       row.eachCell({ includeEmpty: true }, (cell) => {
         cell.fill = {
@@ -114,7 +193,7 @@ export async function buildWorkbook(bundle: ExportBundle, meta: WorkbookMeta): P
       confidenceCell.value = 'not reported';
       confidenceCell.numFmt = '';
     } else {
-      confidenceCell.numFmt = '0.000';
+      confidenceCell.numFmt = '0%';
     }
   });
 
@@ -159,7 +238,7 @@ export async function buildWorkbook(bundle: ExportBundle, meta: WorkbookMeta): P
     ['Blocking findings', String(bundle.summary.blockingCritiques)],
     [
       'How to read this',
-      'Every value on the Results sheet has a row on the Provenance sheet giving the page it came from, the exact text it was read from, and a screenshot. Values we could not verify against the page were excluded and are counted above.',
+      'Every value on the Results sheet has a row on the Provenance sheet giving the page it came from, the exact text it was read from, and a screenshot. Quarantined values are excluded and counted above. Uncertain or disputed values may remain with review flags. Confidence is the extractor score, not a guarantee of correctness. Check Findings for missing requested fields.',
     ],
   ];
   for (const [field, value] of rows) about.addRow({ field, value });

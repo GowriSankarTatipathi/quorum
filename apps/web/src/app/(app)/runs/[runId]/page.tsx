@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { RunCanvas } from '@/components/run/run-canvas';
 import { ApiClientError, apiFetch } from '@/lib/api-client';
 import { auth } from '@/server/auth';
+import type { RunReport } from '@/lib/run-report';
 import type { StepView } from '@/stores/run-store';
 
 export const metadata: Metadata = { title: 'Run — QUORUM' };
@@ -31,18 +32,27 @@ interface RunDetail {
 export default async function RunPage({ params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
   const session = await auth();
-  if (!session?.user.id) redirect(`/signin?callbackUrl=/runs/${runId}`);
+  if (!session?.user.id || !session.accessToken || session.error)
+    redirect(`/signin?callbackUrl=/runs/${runId}`);
 
   let detail: RunDetail;
+  let report: RunReport;
   try {
-    detail = await apiFetch<RunDetail>(`/v1/runs/${runId}`);
+    [detail, report] = await Promise.all([
+      apiFetch<RunDetail>(`/v1/runs/${runId}`),
+      apiFetch<RunReport>(`/v1/runs/${runId}/report`),
+    ]);
   } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      redirect(`/signin?callbackUrl=/runs/${runId}`);
+    }
     if (error instanceof ApiClientError && error.status === 404) notFound();
     throw error;
   }
 
   return (
     <RunCanvas
+      initialReport={report}
       runId={detail.run.id}
       // The access token stays server-side for API calls, but the WebSocket handshake
       // cannot carry headers, so this one short-lived token reaches the client.

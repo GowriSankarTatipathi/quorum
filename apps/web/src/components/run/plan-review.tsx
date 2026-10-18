@@ -31,6 +31,7 @@ export function PlanReview({
   steps: StepView[];
 }) {
   const [pending, startTransition] = useTransition();
+  const [approved, setApproved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const totalUsd = steps.reduce((sum, step) => sum + (step.estimatedUsd ?? 0), 0);
@@ -39,13 +40,18 @@ export function PlanReview({
   const medium = steps.filter((step) => step.riskLevel === 'MEDIUM');
 
   const approve = useCallback(() => {
+    if (pending || approved) return;
     setError(null);
-    startTransition(() => {
-      void approvePlan(runId, planHash).then((result) => {
+    startTransition(async () => {
+      try {
+        const result = await approvePlan(runId, planHash);
         if (!result.ok) setError(result.message);
-      });
+        else setApproved(true);
+      } catch {
+        setError('The connection was interrupted. Reload to check the task before trying again.');
+      }
     });
-  }, [runId, planHash]);
+  }, [runId, planHash, pending, approved]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -134,24 +140,28 @@ export function PlanReview({
         </p>
       )}
 
+      {approved && (
+        <p role="status" className="mt-4 text-sm">
+          Plan approved. Waiting for the worker to begin; the activity view will update when
+          execution starts.
+        </p>
+      )}
       <form
-        action={async () => {
-          const result = await approvePlan(runId, planHash);
-          if (!result.ok) setError(result.message);
-        }}
         onSubmit={(e) => {
           e.preventDefault();
-          setError(null);
-          startTransition(async () => {
-            const result = await approvePlan(runId, planHash);
-            if (!result.ok) setError(result.message);
-          });
+          approve();
         }}
         className="mt-6 flex items-center gap-2"
       >
         <p className="font-mono text-[10px] text-fg-subtle">plan {planHash.slice(0, 12)}</p>
-        <Button type="submit" variant="primary" size="md" className="ml-auto" disabled={pending}>
-          Approve &amp; run
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          className="ml-auto"
+          disabled={pending || approved}
+        >
+          {approved ? 'Approved' : pending ? 'Approving…' : 'Approve & run'}
           <Kbd className="border-white/25 bg-white/10 text-white/80">⌘↵</Kbd>
         </Button>
       </form>

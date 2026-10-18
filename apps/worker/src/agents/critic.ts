@@ -1,8 +1,14 @@
 import { CritiqueOutputSchema, PROMPT_REGISTRY, type CriticClaimView } from '@quorum/ai';
-import { claimRepository, critiqueRepository, type CritiqueRecord } from '@quorum/db';
+import {
+  claimRepository,
+  critiqueRepository,
+  stepRepository,
+  type CritiqueRecord,
+} from '@quorum/db';
 import { eventPublisher } from '../services/event-publisher.js';
 import { createRouter } from '../services/llm.js';
 import { RunTelemetry } from '../services/telemetry.js';
+import { findCoverageGaps, describeCoverageGaps } from './coverage.js';
 
 export interface CriticContext {
   runId: string;
@@ -31,13 +37,56 @@ export async function runCriticAgent(ctx: CriticContext): Promise<CritiqueRecord
   await eventPublisher.emit('agent.started', { agent: 'critic', stepIndex: null }, eventCtx);
 
   const claims = await claimRepository.listCurrentForRun(ctx.runId);
+  const persisted: CritiqueRecord[] = [];
+  const steps = await stepRepository.listForRun(ctx.runId);
+  for (const step of steps) {
+    const schema =
+      step.outputSchema &&
+      typeof step.outputSchema === 'object' &&
+      !Array.isArray(step.outputSchema)
+        ? step.outputSchema
+        : null;
+    // Claims may have been extracted by an earlier step or superseded by a later one.
+    const sourceUrls = new Set(
+      claims.filter((claim) => claim.stepId === step.id).map((claim) => claim.sourceUrl),
+    );
+    if (step.targetUrl) sourceUrls.add(step.targetUrl);
+    const stepClaims = claims.filter(
+      (claim) => claim.stepId === step.id || sourceUrls.has(claim.sourceUrl),
+    );
+    const gaps = findCoverageGaps(schema, stepClaims);
+    if (!gaps.length) continue;
+    const record = await critiqueRepository.create({
+      runId: ctx.runId,
+      kind: 'COVERAGE_GAP',
+      severity: 'WARNING',
+      message: `Step ${step.index + 1} is missing requested fields: ${describeCoverageGaps(gaps)}. Explicitly reported unavailable values are not counted as missing.`,
+      claimIds: [],
+      remedy: {
+        action: 're_extract',
+        params: { stepId: step.id, fields: gaps.map((gap) => gap.field) },
+      },
+    });
+    persisted.push(record);
+    await eventPublisher.emit(
+      'critique.raised',
+      {
+        critiqueId: record.id,
+        kind: record.kind,
+        severity: record.severity,
+        message: record.message,
+        claimIds: [],
+      },
+      eventCtx,
+    );
+  }
   if (claims.length === 0) {
     await eventPublisher.emit(
       'agent.finished',
       { agent: 'critic', durationMs: Date.now() - started, confidence: null },
       eventCtx,
     );
-    return [];
+    return persisted;
   }
 
   const view: CriticClaimView[] = claims.map((claim) => ({
@@ -69,8 +118,6 @@ export async function runCriticAgent(ctx: CriticContext): Promise<CritiqueRecord
   );
 
   const knownIds = new Set(claims.map((claim) => claim.id));
-  const persisted: CritiqueRecord[] = [];
-
   for (const critique of data.critiques) {
     // Citations are validated against the run's real claims. A critique referencing an id
     // that does not exist is itself a hallucination, and storing it would put an

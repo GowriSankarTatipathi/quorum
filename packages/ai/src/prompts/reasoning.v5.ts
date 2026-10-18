@@ -6,7 +6,7 @@ import {
   UNCERTAINTY_CONTRACT,
 } from './shared/index.js';
 
-export const REASONING_PROMPT_VERSION = 'reasoning.v5';
+export const REASONING_PROMPT_VERSION = 'reasoning.v8';
 
 export interface ReasoningAgentInput {
   stepObjective: string;
@@ -61,11 +61,24 @@ This is checked mechanically. Your quoted text is searched for in the captured p
 claim whose quote is not found is discarded and recorded as a suspected fabrication. There
 is no benefit to inventing a quote and no penalty for returning null with a reason.
 
+For lists such as features, return an array of the individual feature strings.
+The sourceText must be a contiguous quote from the page, with its original line breaks;
+it is NOT a joined or reformatted copy of the array. Never insert semicolons between
+separate page lines. A numeric price may quote just its displayed price, such as "$8";
+do not append a unit unless that unit is contiguous in the source text.
+
+For lists such as features, quote a contiguous block exactly as it appears in the
+provided page text, including intervening labels if necessary. Do not join separate
+snippets with invented commas or semicolons. Extract every requested field; do not
+replace missing feature extraction with a verification_summary claim.
+
 Quote enough to be identifiable — "$12 /user/month", not "12".
 </provenance>
 
 <rules>
 1. One claim per (entity, field). Do not merge two vendors into one row.
+   Use the exact field names in <expected_fields>; do not rename them or substitute a summary.
+   Report each requested field for every relevant entity, or null with a specific reason.
 2. Record units exactly as the page states them. If pricing is annual, say so in "unit".
 3. "Custom", "Contact sales", "Let's talk" are not numbers. Return null with
    nullReason "not_present".

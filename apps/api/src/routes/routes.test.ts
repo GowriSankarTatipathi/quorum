@@ -156,8 +156,11 @@ const EXPECTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'GET', path: '/v1/knowledge/sources' },
   { method: 'POST', path: '/v1/runs' },
   { method: 'GET', path: '/v1/runs' },
+  { method: 'GET', path: '/v1/runtime' },
+  { method: 'GET', path: '/v1/runs/{runId}/report' },
   { method: 'GET', path: '/v1/runs/{runId}' },
   { method: 'GET', path: '/v1/runs/{runId}/events' },
+  { method: 'GET', path: '/v1/runs/{runId}/screenshots' },
   { method: 'POST', path: '/v1/runs/estimate' },
 
   // control.ts (prefix /v1)

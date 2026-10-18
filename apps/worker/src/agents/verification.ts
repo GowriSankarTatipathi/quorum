@@ -60,6 +60,8 @@ export async function runVerificationAgent(
       url: claim.sourceUrl,
       capturedAt: ctx.capturedAt,
       sourceRegion: ctx.sourceRegion,
+      entity: claim.entity,
+      nullReason: claim.nullReason,
       field: claim.field,
       claimedValue: claim.value,
       unit: claim.unit,
@@ -100,6 +102,8 @@ export async function runVerificationAgent(
         'claim.contradicted',
         {
           claimId: claim.id,
+          verdict: status,
+          rationale: data.rationale,
           claimed: claim.value,
           independentReading: data.independentReading,
         },

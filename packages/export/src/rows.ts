@@ -130,7 +130,12 @@ export function buildExportBundle(input: ExportInput): ExportBundle {
 
     // Even if quarantined claims are currently excluded by isExportable, we check it to satisfy
     // the definition of "needs a human".
-    const needsReview = hasBlocking || hasBadStatus || disposition === 'QUARANTINE';
+    const needsReview =
+      hasBlocking ||
+      hasBadStatus ||
+      disposition === 'QUARANTINE' ||
+      disposition === 'FLAG' ||
+      disposition === 'HUMAN_REVIEW';
 
     results.push({
       entity: claim.entity,

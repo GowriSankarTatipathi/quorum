@@ -401,6 +401,8 @@ for (const claim of toVerify) {
     url: claim.sourceUrl,
     capturedAt: capture.capturedAt,
     sourceRegion: snapshot.tree,
+    entity: claim.entity,
+    nullReason: claim.nullReason,
     field: claim.field,
     claimedValue: claim.value,
     unit: claim.unit,

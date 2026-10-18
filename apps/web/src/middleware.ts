@@ -18,9 +18,10 @@ export default auth((request) => {
   const { pathname, search } = request.nextUrl;
   const signedIn = Boolean(request.auth?.user);
 
-  if (isAuthRoute(pathname) && signedIn) {
-    return NextResponse.redirect(new URL('/account', request.nextUrl));
-  }
+  // The edge session only verifies the cookie; the server may reject its user or
+  // refresh token. Keep sign-in reachable so a stale cookie cannot create an
+  // account -> sign-in -> account loop or prevent a fresh sign-in.
+  if (isAuthRoute(pathname)) return NextResponse.next();
 
   if (!requiresAuth(pathname) || signedIn) return NextResponse.next();
 

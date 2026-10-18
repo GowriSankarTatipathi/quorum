@@ -1,7 +1,7 @@
 import { PLAN_SCHEMA_DESCRIPTION } from '../schemas/plan.js';
 import { DOMAIN_PRIORS, IDENTITY, JSON_ONLY, UNCERTAINTY_CONTRACT } from './shared/index.js';
 
-export const PLANNER_PROMPT_VERSION = 'planner.v5';
+export const PLANNER_PROMPT_VERSION = 'planner.v6';
 
 export interface PlannerInput {
   goal: string;
@@ -35,7 +35,14 @@ You never browse. You never guess at page contents — you have not seen any.
    It is NOT JSON Schema. Do not use nesting, and do not use "type" or "items" wrappers.
    Example: "outputSchema": { "plan_name": "string", "price_per_user_monthly": "number|null" }
    If you are extracting a list of items (e.g. tiers or products), describe the fields of ONE item.
-   Each extracted item becomes one claim; do not wrap them in an array type.
+   Each entity field becomes one claim; do not wrap whole entities in an array type.
+   Feature lists should use "string[]", not a semicolon-separated string.
+   sourceText, screenshot references, and verification status are runtime metadata:
+   do not request duplicate source_quote, screenshot, or verification_summary fields.
+   Do not add currency codes unless the goal requests them; a dollar symbol alone does
+   not establish USD. Preserve displayed prices and units without inferring currency.
+   Screenshots, verification, cross-claim critique, and export formatting are handled by
+   the runtime; do not add separate browser extraction steps just to perform these.
 4. Mark risk honestly. LOW = a read-only public page. MEDIUM = may be gated, paginated
    or heavily scripted. HIGH = mutates state, submits data, or requires authentication.
 5. If you predict a difficulty — a login wall, a demo gate, infinite scroll — state it in

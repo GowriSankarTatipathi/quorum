@@ -51,7 +51,7 @@ behind the same `BrowserDriver` port but is untested. Confidence calibration is 
 not measured; there is no ECE test. The verifier's catch rate has not been measured
 against planted errors.
 
-Documentation: [architecture](docs/ARCHITECTURE.md) · [deployment](docs/DEPLOYMENT.md) ·
+Documentation: [complete project guide](docs/PROJECT_GUIDE.md) · [architecture](docs/ARCHITECTURE.md) · [deployment](docs/DEPLOYMENT.md) ·
 [demo](docs/DEMO.md) · [troubleshooting](docs/TROUBLESHOOTING.md) · [RAG prototype](docs/RAG.md)
 
 ---

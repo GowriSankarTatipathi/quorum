@@ -79,10 +79,29 @@ describe('reasoning prompt', () => {
 });
 
 describe('verification prompt', () => {
+  it('preserves entity and typed absence for custom pricing', () => {
+    const prompt = PROMPT_REGISTRY.verification.build({
+      url: 'http://localhost/pricing',
+      capturedAt: 'now',
+      sourceRegion: 'Starter $0 Enterprise Custom',
+      entity: 'Enterprise',
+      field: 'price',
+      claimedValue: null,
+      nullReason: 'not_present',
+      unit: null,
+    });
+    const payload = JSON.parse(prompt.user.split('<claim>')[1]!.split('</claim>')[0]!) as Record<
+      string,
+      unknown
+    >;
+    expect(payload).toMatchObject({ entity: 'Enterprise', value: null, nullReason: 'not_present' });
+  });
+
   const built = PROMPT_REGISTRY.verification.build({
     url: 'https://brex.com/pricing',
     capturedAt: '2026-08-02T10:00:00Z',
     sourceRegion: 'Premium $12 /user/month',
+    entity: 'Premium',
     field: 'price_per_user_monthly.premium',
     claimedValue: 12,
     unit: 'USD/user/month',
@@ -106,7 +125,9 @@ describe('verification prompt', () => {
   });
 
   it('carries the claim but not how it was produced', () => {
-    expect(built.user).toContain('<claim field="price_per_user_monthly.premium"');
+    expect(built.user).toContain('"field":"price_per_user_monthly.premium"');
+    expect(built.user).toContain('"entity":"Premium"');
+    expect(built.user).toContain('"value":12');
     expect(built.user).not.toContain('reasoning');
   });
 

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Button } from '@quorum/ui';
 import { ArrowUp, BookOpen, Loader2, ShieldCheck } from 'lucide-react';
 import { useRef, useState, useTransition } from 'react';
@@ -58,10 +59,17 @@ export function KnowledgeAssistant() {
           <BookOpen className="size-3.5" aria-hidden />
           Product documentation
         </p>
-        <h1 className="text-2xl font-medium tracking-tight">Ask QUORUM</h1>
+        <h1 className="text-2xl font-medium tracking-tight">Documentation Q&A</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg-muted">
           Ask how the product works. Answers use the curated QUORUM docs, cite their sources, and
           say when the docs do not support an answer.
+        </p>
+        <p className="mt-3 text-sm text-fg-muted">
+          This page explains QUORUM; it does not browse websites or run tasks.{' '}
+          <Link href="/" className="text-fg underline">
+            Start a browser task
+          </Link>
+          .
         </p>
       </header>
 
@@ -78,7 +86,7 @@ export function KnowledgeAssistant() {
             {turn.sources.length > 0 && (
               <details className="border-t border-hairline pt-3">
                 <summary className="cursor-pointer text-xs text-fg-subtle">
-                  Sources ({turn.sources.length}) · tool: {turn.toolsUsed.join(', ')}
+                  Sources ({turn.sources.length})
                 </summary>
                 <ul className="mt-3 space-y-3">
                   {turn.sources.map((source) => (

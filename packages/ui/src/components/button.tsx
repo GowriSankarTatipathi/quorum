@@ -14,7 +14,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-[var(--color-action)] text-white hover:brightness-110',
+        primary: 'bg-[var(--color-action)] text-white hover:brightness-95',
         secondary:
           'bg-[var(--color-raised)] text-[var(--color-fg)] border border-[var(--color-hairline)] hover:bg-[var(--color-overlay)]',
         ghost:
@@ -24,10 +24,10 @@ const buttonVariants = cva(
         link: 'text-[var(--color-action)] underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-7 px-2.5 text-xs',
-        md: 'h-9 px-3.5',
+        sm: 'min-h-11 px-3 text-sm sm:min-h-9',
+        md: 'min-h-11 px-3.5',
         lg: 'h-11 px-5 text-base',
-        icon: 'h-9 w-9',
+        icon: 'h-11 w-11',
       },
     },
     defaultVariants: { variant: 'secondary', size: 'md' },

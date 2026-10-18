@@ -1,6 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import type { RunReport } from '@/lib/run-report';
+import { clientEnv } from '@/lib/env';
 import { apiFetch, ApiClientError } from '@/lib/api-client';
 
 export interface RunActionResult {
@@ -12,12 +13,51 @@ interface CreatedRun {
   id: string;
 }
 
-export async function createRun(goal: string, mode: string): Promise<void> {
-  const run = await apiFetch<CreatedRun>('/v1/runs', {
-    method: 'POST',
-    body: JSON.stringify({ goal, mode }),
-  });
-  redirect(`/runs/${run.id}`);
+export async function createRun(
+  goal: string,
+  mode: string,
+  requestId: string,
+): Promise<{ ok: true; id: string } | { ok: false; message: string; signInRequired: boolean }> {
+  try {
+    const run = await apiFetch<CreatedRun>('/v1/runs', {
+      method: 'POST',
+      body: JSON.stringify({ goal, mode, requestId }),
+    });
+    revalidatePath('/runs');
+    return { ok: true, id: run.id };
+  } catch (error) {
+    return {
+      ok: false,
+      message: describe(error),
+      signInRequired: error instanceof ApiClientError && error.status === 401,
+    };
+  }
+}
+
+export async function readRuntime(): Promise<{
+  state: 'ready' | 'offline' | 'unknown';
+  workers: number;
+}> {
+  try {
+    const response = await fetch(`${clientEnv.apiUrl}/v1/runtime`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) throw new Error('Unavailable');
+    return (await response.json()) as { state: 'ready' | 'offline' | 'unknown'; workers: number };
+  } catch {
+    return { state: 'unknown', workers: 0 };
+  }
+}
+
+export async function readRunReport(
+  runId: string,
+): Promise<{ ok: true; report: RunReport } | { ok: false; message: string }> {
+  try {
+    return { ok: true, report: await apiFetch<RunReport>(`/v1/runs/${runId}/report`) };
+  } catch (error) {
+    return { ok: false, message: describe(error) };
+  }
 }
 
 /**

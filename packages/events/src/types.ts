@@ -182,7 +182,13 @@ export interface RunEventPayloads extends Record<RunEventType, unknown> {
     sourceUrl: string;
   };
   'claim.verified': { claimId: string; verdict: ClaimStatus; confidence: number | null };
-  'claim.contradicted': { claimId: string; claimed: unknown; independentReading: unknown };
+  'claim.contradicted': {
+    claimId: string;
+    claimed: unknown;
+    independentReading: unknown;
+    verdict?: ClaimStatus;
+    rationale?: string;
+  };
   'claim.superseded': { claimId: string; supersededBy: string; reason: string };
   'claim.corrected': { claimId: string; newClaimId: string; correctedBy: string };
 

@@ -1,5 +1,5 @@
 import { PROMPT_REGISTRY, ReasoningOutputSchema } from '@quorum/ai';
-import { assertGrounded, explainGrounding, type GroundingResult } from '@quorum/core';
+import { assertGrounded, explainGrounding, throwable, type GroundingResult } from '@quorum/core';
 import { claimRepository, type ClaimRecord, type CreateClaimInput } from '@quorum/db';
 import { eventPublisher } from '../services/event-publisher.js';
 import { createRouter } from '../services/llm.js';
@@ -12,6 +12,7 @@ export interface ReasoningAgentContext {
   correlationId: string;
   stepObjective: string;
   outputSchema: Record<string, string> | null;
+  repairOnly?: boolean;
   url: string;
   /** The compressed tree the model reads. */
   pageContent: string;
@@ -51,7 +52,11 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
   // Only tell the model to skip fields that were successfully extracted.
   // If it was just an attempt (null) or was rejected, we want it to try again.
   const successfulFields = ctx.existingClaims.filter(
-    (c) => c.value !== null && c.status !== 'UNSUPPORTED' && c.status !== 'CONTRADICTED',
+    (c) =>
+      c.value !== null &&
+      c.status !== 'UNSUPPORTED' &&
+      c.status !== 'CONTRADICTED' &&
+      c.status !== 'AMBIGUOUS',
   );
 
   const prompt = PROMPT_REGISTRY.reasoning.build({
@@ -79,12 +84,18 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
       { excerpt: data.injectionExcerpt ?? '(no excerpt)', url: ctx.url },
       eventCtx,
     );
+    throw throwable('INJECTION_DETECTED', 'page content attempted to issue instructions');
   }
 
   const accepted: CreateClaimInput[] = [];
   const quarantined: ReasoningResult['quarantined'] = [];
 
   for (const claim of data.claims) {
+    if (
+      ctx.repairOnly &&
+      successfulFields.some((known) => known.entity === claim.entity && known.field === claim.field)
+    )
+      continue;
     const grounding: GroundingResult = assertGrounded({
       value: claim.value,
       sourceText: claim.sourceText,
@@ -166,7 +177,7 @@ export async function runReasoningAgent(ctx: ReasoningAgentContext): Promise<Rea
       {
         errorClass: 'LLM_HALLUCINATION_SUSPECTED',
         code: 'E_LLM_HALLUCINATION_SUSPECTED',
-        humanMessage: `I discarded ${String(quarantined.length)} value${quarantined.length === 1 ? '' : 's'} I could not find on the page.`,
+        humanMessage: `Excluded ${String(quarantined.length)} claim${quarantined.length === 1 ? '' : 's'} because their source evidence could not be matched: ${quarantined.map((c) => `${c.entity} — ${c.field.replaceAll('_', ' ')}`).join('; ')}. Other supported results remain available.`,
         retryable: true,
         requiresHuman: false,
       },

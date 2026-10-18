@@ -448,3 +448,30 @@ describe('terminal status handling', () => {
     expect(store.getState().agents['browser']).toBe('idle');
   });
 });
+
+it('keeps uncertain verdicts distinct from contradictions and retains the independent reading', () => {
+  const store = fresh();
+  store.getState().applyEvent(
+    event('claim.created', {
+      claimId: 'c-ambiguous',
+      entity: 'Collect',
+      field: 'seat_basis',
+      value: 'per user',
+      unit: null,
+      confidence: null,
+      sourceUrl: 'http://localhost:3002/pricing',
+    }),
+  );
+  store.getState().applyEvent(
+    event('claim.contradicted', {
+      claimId: 'c-ambiguous',
+      verdict: 'AMBIGUOUS',
+      independentReading: 'Two possible billing bases',
+    }),
+  );
+  expect(store.getState().claims.get('c-ambiguous')).toMatchObject({
+    status: 'AMBIGUOUS',
+    independentReading: 'Two possible billing bases',
+    confidence: null,
+  });
+});

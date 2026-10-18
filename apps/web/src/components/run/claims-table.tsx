@@ -11,6 +11,8 @@ const STATUS_STYLE: Record<string, string> = {
   VERIFIED: 'text-verified',
   UNVERIFIED: 'text-fg-subtle',
   CONTRADICTED: 'text-failed',
+  AMBIGUOUS: 'text-review',
+  UNSUPPORTED: 'text-review',
   SUPERSEDED: 'text-fg-subtle line-through',
   QUARANTINED: 'text-failed font-medium',
 };
@@ -130,7 +132,7 @@ export function ClaimsTable() {
                             {disposition.replace('_', ' ')}
                           </span>
                         )}
-                        {claim.status === 'CONTRADICTED' &&
+                        {['CONTRADICTED', 'AMBIGUOUS', 'UNSUPPORTED'].includes(claim.status) &&
                           claim.independentReading !== undefined && (
                             <details className="mt-1 group">
                               <summary className="cursor-pointer text-[10px] text-failed hover:underline outline-none">

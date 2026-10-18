@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { elapsedSince, formatTokens, formatUsd } from '@/lib/format';
 import { useRunStream } from '@/hooks/use-run-stream';
-import { controlRun, getExportUrl, requestExport } from '@/server/runs/actions';
+import { readRunReport, controlRun, getExportUrl, requestExport } from '@/server/runs/actions';
 import { useRunStore, type StepView } from '@/stores/run-store';
 import { AgentStatusStrip } from './agent-status-strip';
 import { AgentStream } from './agent-stream';
@@ -15,6 +15,8 @@ import { BrowserViewport } from './browser-viewport';
 import { ClaimsTable } from './claims-table';
 import { EventLog } from './event-log';
 import { cn } from '@quorum/ui';
+import type { RunReport } from '@/lib/run-report';
+import { ResultsSummary } from './results-summary';
 import { PlanReview } from './plan-review';
 
 export interface RunCanvasProps {
@@ -25,6 +27,7 @@ export interface RunCanvasProps {
   planHash: string | null;
   goal: string;
   startedAt: string | null;
+  initialReport?: RunReport;
 }
 
 /**
@@ -60,6 +63,29 @@ export function RunCanvas(props: RunCanvasProps) {
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [report, setReport] = useState<RunReport | null>(props.initialReport ?? null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [view, setView] = useState<'results' | 'activity'>('results');
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      const result = await readRunReport(props.runId);
+      if (!active) return;
+      if (result.ok) {
+        setReport(result.report);
+        setReportError(null);
+      } else setReportError(result.message);
+    };
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, 10000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [props.runId]);
+
   // Intentionally once per run id. `initialSteps` is a fresh array identity on every
   // parent render, so listing it as a dependency re-seeded the store mid-run and threw
   // away live state — the guard is the dependency, not the array.
@@ -83,7 +109,7 @@ export function RunCanvas(props: RunCanvasProps) {
     };
   }, []);
 
-  const status = storeStatus === 'CREATED' ? props.initialStatus : storeStatus;
+  const status = storeStatus === 'CREATED' ? (report?.status ?? props.initialStatus) : storeStatus;
   const planSteps = steps.size > 0 ? [...steps.values()] : props.initialSteps;
   const planHash = storePlanHash ?? props.planHash;
   const startedAt = storeStartedAt ?? props.startedAt;
@@ -179,14 +205,32 @@ export function RunCanvas(props: RunCanvasProps) {
     };
   }, [running, status, control]);
 
-  if (status === 'AWAITING_APPROVAL' && planHash) {
-    return <PlanReview runId={props.runId} planHash={planHash} steps={planSteps} />;
+  if (status === 'AWAITING_APPROVAL' && planHash && !report?.approvalQueued) {
+    return (
+      <div>
+        {report?.availability.state === 'offline' && (
+          <p
+            role="status"
+            className="mx-auto mt-5 max-w-2xl rounded-lg border border-hairline p-4 text-sm text-review"
+          >
+            No worker is connected. You can review this plan now; execution will wait for a worker
+            after approval.
+          </p>
+        )}
+        <PlanReview
+          key={`${props.runId}:${planHash}`}
+          runId={props.runId}
+          planHash={planHash}
+          steps={planSteps}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-5 py-2.5">
-        <p className="truncate text-sm" title={goal}>
+        <p className="min-w-0 max-w-full truncate text-sm" title={goal}>
           {goal}
         </p>
         <p className="ml-auto flex items-center gap-3 font-mono text-[11px] tabular-nums text-fg-subtle">
@@ -198,12 +242,23 @@ export function RunCanvas(props: RunCanvasProps) {
               degraded mode
             </span>
           )}
-          <span className="uppercase">{status.toLowerCase().replace('_', ' ')}</span>
-          <span>{now === null ? '0:00' : elapsedSince(startedAt, now)}</span>
+          <span className="uppercase">
+            {status === 'COMPLETED' ? 'finished' : status.toLowerCase().replaceAll('_', ' ')}
+          </span>
+          <span>
+            {now === null
+              ? '0:00'
+              : elapsedSince(
+                  startedAt,
+                  isTerminal && report
+                    ? new Date(report.finishedAt ?? report.lastActivityAt).getTime()
+                    : now,
+                )}
+          </span>
           <span>{formatTokens(inputTokens + outputTokens)} tok</span>
           <span>{formatUsd(spentUsd)}</span>
         </p>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {status === 'PAUSED' ? (
             <Button
               variant="secondary"
@@ -230,12 +285,15 @@ export function RunCanvas(props: RunCanvasProps) {
           <Button
             variant="ghost"
             size="sm"
-            disabled={pending}
+            disabled={pending || isTerminal}
             onClick={() => {
               control('stop');
             }}
           >
             <Square aria-hidden /> Stop
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/runs/${props.runId}/evidence`}>Screenshots</Link>
           </Button>
           <Button variant="ghost" size="sm" onClick={exportRun} disabled={exporting}>
             {exporting ? (
@@ -253,7 +311,53 @@ export function RunCanvas(props: RunCanvasProps) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[55%_45%]">
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-5 py-2"
+        role="group"
+        aria-label="Run view"
+      >
+        <Button
+          variant={view === 'results' ? 'secondary' : 'ghost'}
+          size="sm"
+          aria-pressed={view === 'results'}
+          onClick={() => setView('results')}
+        >
+          Results and evidence
+        </Button>
+        <Button
+          variant={view === 'activity' ? 'secondary' : 'ghost'}
+          size="sm"
+          aria-pressed={view === 'activity'}
+          onClick={() => setView('activity')}
+        >
+          Agent activity and browser
+        </Button>
+        {reportError && (
+          <p role="alert" className="text-sm text-review">
+            {reportError}{' '}
+            <Link href="/signin" className="underline">
+              Sign in
+            </Link>
+          </p>
+        )}
+      </div>
+      {view === 'results' && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          {report ? (
+            <ResultsSummary report={report} goal={goal} runId={props.runId} />
+          ) : (
+            <p role="status" className="p-6 text-sm text-fg-muted">
+              Loading task status and evidence…
+            </p>
+          )}
+        </div>
+      )}
+      <div
+        className={cn(
+          'min-h-0 flex-1 grid-cols-1 overflow-auto lg:grid-cols-[55%_45%]',
+          view === 'activity' ? 'grid' : 'hidden',
+        )}
+      >
         <div className="flex min-h-0 flex-col border-r border-hairline">
           <div className="min-h-0 flex-1 overflow-auto">
             <AgentStream />
@@ -264,7 +368,7 @@ export function RunCanvas(props: RunCanvasProps) {
         </div>
 
         <div className="flex min-h-0 flex-col gap-3 p-3">
-          <div className="min-h-0 flex-1">
+          <div className="min-h-[280px] flex-1 lg:min-h-0">
             <BrowserViewport />
           </div>
           <div
@@ -280,12 +384,6 @@ export function RunCanvas(props: RunCanvasProps) {
           </div>
         </div>
       </div>
-
-      {notice && (
-        <p role="status" className="border-t border-hairline px-5 py-2 text-xs text-review">
-          {notice}
-        </p>
-      )}
 
       {notice && (
         <p role="status" className="border-t border-hairline px-5 py-2 text-xs text-review">

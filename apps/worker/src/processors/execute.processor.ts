@@ -5,6 +5,7 @@ import type { Job } from 'bullmq';
 import { executeStep } from '../agents/step-executor.js';
 import { runCriticAgent } from '../agents/critic.js';
 import { env } from '../env.js';
+import { keepSessionAlive } from '../services/session-activity.js';
 import { logger } from '../logger.js';
 import { browserDriver, sessionPool } from '../services/browser.js';
 import { eventPublisher, newCorrelation } from '../services/event-publisher.js';
@@ -64,6 +65,12 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
     respectRobotsTxt: env.RESPECT_ROBOTS_TXT,
   });
 
+  // Model calls and approval waits are active work even when no browser action occurs.
+  // The pool's independent maximum-session limit still bounds hung executions.
+  const stopSessionHeartbeat = keepSessionAlive(
+    () => sessionPool.touch(session.id),
+    env.SESSION_IDLE_TIMEOUT_MS,
+  );
   const sessionStartedAt = Date.now();
   let streamActive = true;
   let streamPromise: Promise<void> | null = null;
@@ -202,7 +209,8 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
       runId,
       correlationId: newCorrelation(),
       goal: run.goal,
-      expectedEntityCount: board.allowedHosts.length > 0 ? board.allowedHosts.length : null,
+      // A host count is not an entity count. The Critic reads scope from the goal.
+      expectedEntityCount: null,
     });
 
     // A blocking finding means the result is wrong if unaddressed, so the run does not
@@ -227,6 +235,7 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
 
     logger.info({ runId, critiques: critiques.length, blocked }, 'run execution finished');
   } finally {
+    stopSessionHeartbeat();
     streamActive = false;
     if (streamPromise) await streamPromise;
 
@@ -238,7 +247,7 @@ export async function processRunExecute(job: Job<ExecuteJobData>): Promise<void>
         finalFrameKey = `runs/${runId}/final-${Date.now()}.jpg`;
         const storage = getStorage();
         await storage.put(finalFrameKey, buffer, 'image/jpeg');
-        finalFrameUrl = await storage.signedUrl(finalFrameKey, 604800, 'screenshot.jpg');
+        finalFrameUrl = await storage.signedUrl(finalFrameKey, 604800);
       } catch (err) {
         logger.warn({ runId, err }, 'Failed to capture final frame');
       }
