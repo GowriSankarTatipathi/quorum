@@ -7,6 +7,7 @@ import { apiFetch, ApiClientError } from '@/lib/api-client';
 export interface RunActionResult {
   ok: boolean;
   message: string;
+  alreadyDecided?: boolean;
 }
 
 interface CreatedRun {
@@ -122,7 +123,11 @@ export async function decideApproval(
     });
     return { ok: true, message: decision === 'APPROVED' ? 'Approved.' : 'Skipped.' };
   } catch (error) {
-    return { ok: false, message: describe(error) };
+    return {
+      ok: false,
+      message: describe(error),
+      alreadyDecided: error instanceof ApiClientError && error.code === 'E_ALREADY_DECIDED',
+    };
   }
 }
 

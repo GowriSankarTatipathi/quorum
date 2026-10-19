@@ -136,6 +136,14 @@ function isHostAllowed(host: string, allowed: readonly string[]): boolean {
 }
 
 function classifyClickTarget(target: ElementDescriptor): TrustLevel {
+  // Pricing selectors change the displayed billing period; they do not submit a payment.
+  // Keep this exception narrow: a button or submit control with the same label stays gated.
+  if (
+    ['radio', 'tab', 'switch'].includes(target.role) &&
+    target.isSubmit === false &&
+    /^pay (monthly|annually|yearly)$/.test(normalize(target.name))
+  )
+    return TrustLevel.L2_MUTATE;
   if (matchesAny(target.name, PAYMENT_INTENT)) return TrustLevel.L4_EXTERNAL;
   if (target.isSubmit === true) return TrustLevel.L3_COMMIT;
   if (matchesAny(target.name, COMMIT_INTENT)) return TrustLevel.L3_COMMIT;

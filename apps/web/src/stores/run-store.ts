@@ -454,7 +454,8 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
     case 'approval.granted':
     case 'approval.rejected':
     case 'approval.timeout':
-      next.pendingApproval = null;
+      if (next.pendingApproval?.approvalId === payloadOf<{ approvalId: string }>(event).approvalId)
+        next.pendingApproval = null;
       break;
 
     case 'human.takeover.started': {
@@ -485,6 +486,7 @@ export function reduceEvent(draft: Draft, event: StreamEvent): Draft {
     next.agents = agents;
   }
 
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(next.status)) next.pendingApproval = null;
   return next;
 }
 

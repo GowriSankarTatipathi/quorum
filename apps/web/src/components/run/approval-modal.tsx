@@ -31,6 +31,8 @@ export function ApprovalModal({ runId }: { runId: string }) {
   const [payload, setPayload] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    setError(null);
+    setScopeAll(false);
     if (!approval?.payload) {
       setPayload({});
       return;
@@ -44,21 +46,30 @@ export function ApprovalModal({ runId }: { runId: string }) {
 
   const decide = useCallback(
     (decision: 'APPROVED' | 'REJECTED') => {
-      if (!approval) return;
+      if (!approval || pending) return;
       setError(null);
-      startTransition(() => {
-        void decideApproval(
-          runId,
-          approval.approvalId,
-          decision,
-          Object.keys(payload).length > 0 ? payload : null,
-          scopeAll ? 'SIMILAR_IN_RUN' : 'SINGLE',
-        ).then((result) => {
-          if (!result.ok) setError(result.message);
-        });
+      startTransition(async () => {
+        try {
+          const result = await decideApproval(
+            runId,
+            approval.approvalId,
+            decision,
+            Object.keys(payload).length > 0 ? payload : null,
+            scopeAll ? 'SIMILAR_IN_RUN' : 'SINGLE',
+          );
+          if (result.ok || result.alreadyDecided) {
+            useRunStore.setState((state) =>
+              state.pendingApproval?.approvalId === approval.approvalId
+                ? { pendingApproval: null }
+                : {},
+            );
+          } else setError(result.message);
+        } catch {
+          setError('Could not submit your decision. Please try again.');
+        }
       });
     },
-    [approval, runId, payload, scopeAll],
+    [approval, runId, payload, scopeAll, pending],
   );
 
   useEffect(() => {
