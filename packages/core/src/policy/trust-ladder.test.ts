@@ -169,3 +169,27 @@ describe('isIrreversible', () => {
     expect(isIrreversible({ type: 'scroll', direction: 'down', pixels: 10 })).toBe(false);
   });
 });
+
+describe('billing period selectors', () => {
+  it.each(['Pay monthly', 'Pay annually', 'Pay yearly'])(
+    'treats %s radio as a reversible choice',
+    (name) => {
+      const action: BrowserAction = {
+        type: 'click',
+        ref: 1,
+        target: el({ name, role: 'radio', isSubmit: false }),
+      };
+      expect(trustLadder(action, 'BALANCED').requiresApproval).toBe(false);
+      expect(trustLadder(action, 'CAREFUL').requiresApproval).toBe(true);
+      expect(classify(action)).toBe(TrustLevel.L2_MUTATE);
+    },
+  );
+  it.each([
+    { name: 'Pay monthly', role: 'button', isSubmit: false },
+    { name: 'Pay monthly', role: 'radio', isSubmit: true },
+    { name: 'Pay monthly and subscribe', role: 'radio', isSubmit: false },
+    { name: 'Pay now', role: 'radio', isSubmit: false },
+  ])('keeps payment actions gated: $name / $role', (target) => {
+    expect(classify({ type: 'click', ref: 1, target: el(target) })).toBe(TrustLevel.L4_EXTERNAL);
+  });
+});

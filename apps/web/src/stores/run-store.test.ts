@@ -475,3 +475,18 @@ it('keeps uncertain verdicts distinct from contradictions and retains the indepe
     confidence: null,
   });
 });
+
+it('does not dismiss a newer approval when an older decision arrives', () => {
+  const store = fresh();
+  store.getState().applyEvent(event('approval.requested', { approvalId: 'new', trustLevel: 4 }));
+  store.getState().applyEvent(event('approval.granted', { approvalId: 'old' }));
+  expect(store.getState().pendingApproval?.approvalId).toBe('new');
+  store.getState().applyEvent(event('approval.rejected', { approvalId: 'new' }));
+  expect(store.getState().pendingApproval).toBeNull();
+});
+it('clears a stale approval when a run finishes', () => {
+  const store = fresh();
+  store.getState().applyEvent(event('approval.requested', { approvalId: 'old', trustLevel: 4 }));
+  store.getState().applyEvent(event('run.completed', {}));
+  expect(store.getState().pendingApproval).toBeNull();
+});

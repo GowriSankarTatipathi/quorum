@@ -101,6 +101,28 @@ export async function awaitApproval(input: RequestApprovalInput): Promise<Approv
     }
 
     const decision = JSON.parse(raw[1]) as ApprovalDecision;
+    const context = { runId: input.runId, agent: 'human' as const, stepId: input.stepId };
+    if (decision.decision === 'APPROVED') {
+      await eventPublisher.emit(
+        'approval.granted',
+        {
+          approvalId: approval.id,
+          by: decision.userId,
+          edited: decision.editedPayload !== null,
+          scope: decision.scope,
+        },
+        context,
+      );
+    } else {
+      await eventPublisher.emit(
+        'approval.rejected',
+        {
+          approvalId: approval.id,
+          by: decision.userId,
+        },
+        context,
+      );
+    }
     logger.info(
       { runId: input.runId, approvalId: approval.id, decision: decision.decision },
       'approval decided',
